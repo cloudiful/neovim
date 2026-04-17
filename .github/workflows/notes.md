@@ -59,9 +59,7 @@ If your system does not have the required glibc version, try the (unsupported) [
 2. Extract: `tar xzvf nvim-linux-x86_64.tar.gz`
 3. Run `./nvim-linux-x86_64/bin/nvim`
 
-### Linux (x86_64, musl)
-
-#### Tarball
+#### Tarball (musl)
 
 1. Download **nvim-linux-x86_64-musl.tar.gz**
 2. Extract: `tar xzvf nvim-linux-x86_64-musl.tar.gz`
@@ -84,6 +82,12 @@ If your system does not have the required glibc version, try the (unsupported) [
 1. Download **nvim-linux-arm64.tar.gz**
 2. Extract: `tar xzvf nvim-linux-arm64.tar.gz`
 3. Run `./nvim-linux-arm64/bin/nvim`
+
+#### Tarball (musl)
+
+1. Download **nvim-linux-arm64-musl.tar.gz**
+2. Extract: `tar xzvf nvim-linux-arm64-musl.tar.gz`
+3. Run `./nvim-linux-arm64-musl/bin/nvim`
 
 ### Other
 

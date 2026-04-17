@@ -20,6 +20,7 @@ Downloads are available on the [Releases](https://github.com/neovim/neovim/relea
     * [Linux x86_64](https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz)
     * [Linux x86_64 (musl)](https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64-musl.tar.gz)
     * [Linux arm64](https://github.com/neovim/neovim/releases/latest/download/nvim-linux-arm64.tar.gz)
+    * [Linux arm64 (musl)](https://github.com/neovim/neovim/releases/latest/download/nvim-linux-arm64-musl.tar.gz)
     * [Windows x86_64](https://github.com/neovim/neovim/releases/latest/download/nvim-win64.msi)
     * [Windows arm64](https://github.com/neovim/neovim/releases/latest/download/nvim-win-arm64.msi)
 * Latest [development prerelease](https://github.com/neovim/neovim/releases/nightly)
@@ -146,7 +147,7 @@ Then add this to your shell config (`~/.bashrc`, `~/.zshrc`, ...):
 export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
 ```
 
-For Alpine Linux and other musl-based distributions, use the `nvim-linux-x86_64-musl.tar.gz` archive instead.
+For Alpine Linux and other musl-based distributions, use the `nvim-linux-<arch>-musl.tar.gz` archive instead.
 
 ### AppImage ("universal" Linux package)
 
