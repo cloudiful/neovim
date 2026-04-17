@@ -97,6 +97,49 @@ jobs:
           printf 'version<<END\n' >> $GITHUB_OUTPUT
           ./build/bin/nvim --version | head -n 3 >> $GITHUB_OUTPUT
           printf 'END\n' >> $GITHUB_OUTPUT
+
+  linux-musl:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ ubuntu-22.04, ubuntu-22.04-arm ]
+        include:
+          - runner: ubuntu-22.04
+            arch: x86_64
+          - runner: ubuntu-22.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    env:
+      CMAKE_BUILD_TYPE: ${{ needs.setup.outputs.build_type }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Perform a full checkout #13471
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Build musl tarball
+        run: |
+          docker run --rm \
+            -e CMAKE_BUILD_TYPE \
+            -v "$PWD:/workdir" \
+            -w /workdir \
+            alpine:latest \
+            sh -euxc '
+              apk add --no-cache build-base cmake coreutils curl gettext-tiny-dev git linux-headers ninja tar
+              cmake -S cmake.deps -B .deps -G Ninja -D CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+              cmake --build .deps
+              cmake -B build -G Ninja -D CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" -D STATIC_BUILD=1
+              cmake --build build
+              cpack --config build/CPackConfig.cmake -G TGZ -D CPACK_PACKAGE_FILE_NAME=nvim-linux-${{ matrix.arch }}-musl
+            '
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nvim-linux-${{ matrix.arch }}-musl
+          path: build/nvim-linux-${{ matrix.arch }}-musl.tar.gz
+          retention-days: 1
   macos:
     needs: setup
     strategy:
@@ -191,7 +234,7 @@ jobs:
           retention-days: 1
 
   publish:
-    needs: [linux, macos, windows]
+    needs: [linux, linux-musl, macos, windows]
     runs-on: ubuntu-latest
     env:
       GH_REPO: ${{ github.repository }}
@@ -244,6 +287,6 @@ jobs:
         run: |
           envsubst < "$GITHUB_WORKSPACE/.github/workflows/notes.md" > "$RUNNER_TEMP/notes.md"
           if [ "$TAG_NAME" != "nightly" ]; then
-            gh release create stable $PRERELEASE --notes-file "$RUNNER_TEMP/notes.md" --title "$SUBJECT" --target $GITHUB_SHA nvim-macos-x86_64/* nvim-macos-arm64/* nvim-linux-x86_64/* nvim-linux-arm64/* nvim-appimage-x86_64/* nvim-appimage-arm64/* nvim-win-x86_64/* nvim-win-arm64/*
+            gh release create stable $PRERELEASE --notes-file "$RUNNER_TEMP/notes.md" --title "$SUBJECT" --target $GITHUB_SHA nvim-macos-x86_64/* nvim-macos-arm64/* nvim-linux-x86_64/* nvim-linux-x86_64-musl/* nvim-linux-arm64/* nvim-linux-arm64-musl/* nvim-appimage-x86_64/* nvim-appimage-arm64/* nvim-win-x86_64/* nvim-win-arm64/*
           fi
-          gh release create $TAG_NAME $PRERELEASE --notes-file "$RUNNER_TEMP/notes.md" --title "$SUBJECT" --target $GITHUB_SHA nvim-macos-x86_64/* nvim-macos-arm64/* nvim-linux-x86_64/* nvim-linux-arm64/* nvim-appimage-x86_64/* nvim-appimage-arm64/* nvim-win-x86_64/* nvim-win-arm64/*
+          gh release create $TAG_NAME $PRERELEASE --notes-file "$RUNNER_TEMP/notes.md" --title "$SUBJECT" --target $GITHUB_SHA nvim-macos-x86_64/* nvim-macos-arm64/* nvim-linux-x86_64/* nvim-linux-x86_64-musl/* nvim-linux-arm64/* nvim-linux-arm64-musl/* nvim-appimage-x86_64/* nvim-appimage-arm64/* nvim-win-x86_64/* nvim-win-arm64/*
