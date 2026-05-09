@@ -62,12 +62,14 @@ end
 
 --- :edit, but it respects commands like :hor, :vert, :tab, etc.
 --- @param file string
---- @param mods_str string
-function M.wrapped_edit(file, mods_str)
-  local cmdline = table.concat({ mods_str, 'edit' }, ' ')
-  local mods = vim.api.nvim_parse_cmd(cmdline, {}).mods
-  --- @diagnostic disable-next-line: need-check-nil
-  if mods.tab > 0 or mods.split ~= '' or mods.horizontal or mods.vertical then
+--- @param mods string|vim.api.keyset.cmd_mods Modifier string ("vertical") or structured mods table.
+function M.wrapped_edit(file, mods)
+  assert(mods)
+  if type(mods) == 'string' then
+    mods = vim.api.nvim_parse_cmd(mods .. ' edit', {}).mods --[[@as vim.api.keyset.cmd_mods]]
+  end
+  --- @cast mods vim.api.keyset.cmd_mods
+  if (mods.tab or 0) > 0 or (mods.split or '') ~= '' or mods.horizontal or mods.vertical then
     local buf = M.get_buf_by_name(file)
     if buf == nil then
       buf = vim.api.nvim_create_buf(true, false)
@@ -125,6 +127,43 @@ function M.term_exitcode()
     return string.format('[Exit: %d]', info.exitcode)
   end
   return ''
+end
+
+--- Compute a link to a target on a forge host
+--- @param repo string URL of repo, usually "https://<domain>/<user>/<name>"
+--- @param target string Identifier of a target, like commit hash or tag name
+--- @param target_type "commit"|"tag"
+--- @return string? # Example: <repo>/releases/tag/<target>
+function M.get_forge_url(repo, target, target_type)
+  -- The structure <host>/<middle>/<target> works for most forges. Like:
+  -- - https://github.com/neovim/nvim-lspconfig/commit/e146efa
+  -- - https://github.com/neovim/nvim-lspconfig/releases/tag/v2.8.0
+  local ref_middles = {
+    { pattern = '^https://github%.com/', commit = 'commit', tag = 'releases/tag' },
+    { pattern = '^https://gitlab%.com/', commit = '-/commit', tag = '-/tags' },
+    { pattern = '^https://git%.sr%.ht/', commit = 'commit', tag = 'refs' },
+    { pattern = '^https://tangled%.org/', commit = 'commit', tag = 'tags' },
+    { pattern = '^https://bitbucket%.org/', commit = 'commits', tag = 'src' },
+
+    -- Fall back to Forgejo style since there is no fixed host
+    { pattern = '^https://', commit = 'commit', tag = 'src/tag' },
+  }
+
+  local middle = ''
+  for _, mid in ipairs(ref_middles) do
+    if repo:match(mid.pattern) then
+      middle = mid[target_type]
+      if middle ~= '' then
+        break
+      end
+    end
+  end
+
+  if middle == '' then
+    return nil
+  end
+  repo = repo:gsub('/+$', '')
+  return ('%s/%s/%s'):format(repo, middle, target)
 end
 
 return M

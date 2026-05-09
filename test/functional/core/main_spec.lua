@@ -215,7 +215,10 @@ describe('vim._core', function()
     t.matches("^module 'vim%.hl' not found:", t.pcall_err(n.exec_lua, [[require('vim.hl')]]))
 
     -- All `vim._core.*` modules are builtin.
-    t.eq({ 'serverlist' }, n.exec_lua([[return vim.tbl_keys(require('vim._core.server'))]]))
+    t.eq(
+      { 'rebind_after_restart', 'serverlist' },
+      n.exec_lua([[local k = vim.tbl_keys(require('vim._core.server')); table.sort(k); return k]])
+    )
     local expected = {
       'vim.F',
       'vim._core.defaults',
@@ -227,10 +230,17 @@ describe('vim._core', function()
       'vim._core.options',
       'vim._core.server',
       'vim._core.shared',
+      'vim._core.spell',
       'vim._core.stringbuffer',
+      'vim._core.swapfile',
       'vim._core.system',
+      'vim._core.table',
+      'vim._core.tag',
+      'vim._core.time',
+      'vim._core.ui',
       'vim._core.ui2',
       'vim._core.util',
+      'vim._core.vimfn',
       'vim._init_packages',
       'vim.filetype',
       'vim.fs',
@@ -238,6 +248,7 @@ describe('vim._core', function()
       'vim.keymap',
       'vim.loader',
       'vim.text',
+      'vim.tty',
     }
     if n.exec_lua [[return not not _G.jit]] then
       expected = vim.list_extend({

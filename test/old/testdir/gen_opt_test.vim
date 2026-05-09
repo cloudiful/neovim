@@ -24,6 +24,7 @@ while search("^'[^']*'.*\\n.*|global-local", 'W')
 endwhile
 call extend(global_locals, #{
       \ scrolloff: -1,
+      \ scrolloffpad: -1,
       \ sidescrolloff: -1,
       \ undolevels: -123456,
       \})
@@ -127,6 +128,7 @@ let test_values = {
       \ 'scroll': [[0, 1, 2, 15], [-1, 999]],
       \ 'scrolljump': [[-100, -1, 0, 1, 2, 15], [-101, 999]],
       \ 'scrolloff': [[0, 1, 8, 999], [-1]],
+      \ 'scrolloffpad': [[0, 1, 2, 3], [-1]],
       \ 'shiftwidth': [[0, 1, 8, 999], [-1]],
       \ 'sidescroll': [[0, 1, 8, 999], [-1]],
       \ 'sidescrolloff': [[0, 1, 8, 999], [-1]],
@@ -326,6 +328,10 @@ let test_values = {
       \ 'sessionoptions': [['', 'blank', 'curdir', 'sesdir',
       \		'help,options,slash'],
       \		['xxx', 'curdir,sesdir']],
+      \ 'shellpipe': [[ '', '>', '>%s2>&1', '\|tee', '\|&tee', '2>&1\|tee', '%%'],
+      \		['%s%s%s', '%s%p%d']],
+      \ 'shellredir': [[ '', '>', '>%s2>&1', '\|tee', '\|&tee', '2>&1\|tee', '%%'],
+      \		['%s%s%s', '%s%p%d']],
       \ 'showcmdloc': [['last', 'statusline', 'tabline'], ['xxx']],
       "\ 'signcolumn': [['', 'auto', 'no', 'yes', 'number'], ['xxx', 'no,yes']],
       \ 'spellfile': [['', 'file.en.add', 'xxx.en.add,yyy.gb.add,zzz.ja.add',
@@ -376,6 +382,7 @@ let test_values = {
       \		['xxx']],
       \ 'wildmode': [['', 'full', 'longest', 'list', 'lastused', 'list:full',
       \		'noselect', 'noselect,full', 'noselect:lastused,full',
+      \		'noinsert', 'noinsert,full', 'noinsert:lastused,full',
       \		'full,longest', 'full,full,full,full'],
       \		['xxx', 'a4', 'full,full,full,full,full']],
       \ 'wildoptions': [['', 'tagfile', 'pum', 'fuzzy'], ['xxx']],

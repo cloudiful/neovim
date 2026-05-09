@@ -969,6 +969,25 @@ describe('lua stdlib', function()
     eq(false, exec_lua('return vim.islist({1, 2, nil, 4})'))
     eq(false, exec_lua('return vim.islist({nil, 2, 3, 4})'))
     eq(false, exec_lua('return vim.islist({1, [1.5]=2, [3]=3})'))
+    eq(
+      false,
+      exec_lua([[
+        local t = setmetatable({ 1, [3] = 3 }, {
+          __index = function()
+            return 2
+          end,
+        })
+        return vim.islist(t)
+      ]])
+    )
+  end)
+
+  it('vim.isnil', function()
+    eq(true, exec_lua('return vim.isnil(nil)'))
+    eq(true, exec_lua('return vim.isnil(vim.NIL)'))
+    eq(false, exec_lua('return vim.isnil(true)'))
+    eq(false, exec_lua('return vim.isnil(false)'))
+    eq(false, exec_lua('return vim.isnil({})'))
   end)
 
   it('vim.tbl_isempty', function()
@@ -1389,6 +1408,15 @@ describe('lua stdlib', function()
       return vim.fn.substitute('a b c', 'b', function(m) return '(' .. m[1] .. ')' end, 'g')
     ]])
     )
+  end)
+
+  it('vim.fn `func_lua` (fast path for Lua-implemented builtins)', function()
+    -- hostname() is implemented via func_lua, calling Lua directly when invoked from Lua.
+    local lua_result = exec_lua([[return vim.fn.hostname()]])
+    eq(type(lua_result), 'string')
+    assert(#lua_result > 0, 'hostname() should return a non-empty string')
+    -- VimScript path (lua_wrapper) should return the same result.
+    eq(lua_result, eval('hostname()'))
   end)
 
   it('vim.call fails in fast context', function()
@@ -2003,14 +2031,14 @@ describe('lua stdlib', function()
 
       local errmsg = api.nvim_get_vvar('errmsg')
       matches(
-        [[
-^vim%.on%_key%(%) callbacks:.*
-With ns%_id %d+: .*: Dumb Error
-stack traceback:
-.*: in function 'error'
-.*: in function 'ErrF2'
-.*: in function 'ErrF1'
-.*]],
+        t.dedent [[
+          ^vim%.on%_key%(%) callbacks:.*
+          With ns%_id %d+: .*: Dumb Error
+          stack traceback:
+          .*: in function 'error'
+          .*: in function 'ErrF2'
+          .*: in function 'ErrF1'
+          .*]],
         errmsg
       )
     end)
@@ -2362,10 +2390,9 @@ stack traceback:
     end)
 
     it('callback must be a function', function()
-      eq(
-        { false, 'vim.wait: callback must be callable' },
-        exec_lua [[return {pcall(function() vim.wait(1000, 13) end)}]]
-      )
+      local result = exec_lua [[return {pcall(function() vim.wait(1000, 13) end)}]]
+      eq(false, result[1])
+      matches('callback: expected callable, got number$', remove_trace(result[2]))
     end)
 
     it('waits if callback arg is nil', function()
@@ -2957,8 +2984,8 @@ stack traceback:
     )
   end)
 
-  it('vim.F.if_nil', function()
-    local function if_nil(...)
+  it('vim.nonnil', function()
+    local function nonnil(...)
       return exec_lua(
         [[
         local args = {...}
@@ -2968,7 +2995,7 @@ stack traceback:
             args[i] = nil
           end
         end
-        return vim.F.if_nil(unpack(args, 1, nargs))
+        return vim.nonnil(unpack(args, 1, nargs))
       ]],
         ...
       )
@@ -2978,12 +3005,33 @@ stack traceback:
     local b = NIL
     local c = 42
     local d = false
-    eq(42, if_nil(a, c))
-    eq(false, if_nil(d, b))
-    eq(42, if_nil(a, b, c, d))
-    eq(false, if_nil(d))
-    eq(false, if_nil(d, c))
-    eq(NIL, if_nil(a))
+    eq(42, nonnil(a, c))
+    eq(false, nonnil(d, b))
+    eq(42, nonnil(a, b, c, d))
+    eq(false, nonnil(d))
+    eq(false, nonnil(d, c))
+    eq(NIL, nonnil(a))
+  end)
+
+  it('vim.npcall', function()
+    -- No error
+    eq(
+      { '123', 'test' },
+      exec_lua(function()
+        local function swap_args(a, b)
+          return b, a
+        end
+        return { vim.npcall(swap_args, 'test', '123') }
+      end)
+    )
+
+    -- Error
+    eq(
+      nil,
+      exec_lua(function()
+        return vim.npcall(error, 'error')
+      end)
+    )
   end)
 
   it('lpeg', function()
@@ -3268,8 +3316,8 @@ describe('vim.keymap', function()
   end)
 end)
 
-describe('Vimscript function exists()', function()
-  it('can check a lua function', function()
+describe('vim.fn.exists()', function()
+  it('can check a Lua function', function()
     eq(
       1,
       exec_lua [[

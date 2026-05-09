@@ -22,6 +22,17 @@ describe('vim.range', function()
     eq(buf, range[5])
   end)
 
+  it('creates a range with buf=0', function()
+    local range, buf = exec_lua(function()
+      return vim.range(0, 3, 5, 4, 6), vim.api.nvim_get_current_buf()
+    end)
+    eq(3, range[1])
+    eq(5, range[2])
+    eq(4, range[3])
+    eq(6, range[4])
+    eq(buf, range[5])
+  end)
+
   it('creates a range from two positions', function()
     local range, buf1 = exec_lua(function()
       local buf = vim.api.nvim_create_buf(false, true)
@@ -79,12 +90,92 @@ describe('vim.range', function()
     )
   end)
 
-  it('checks whether a range does not contain an empty range just outside it', function()
+  it('a range does not contain an empty range just outside it', function()
     eq(
       false,
       exec_lua(function()
-        local buf = vim.api.nvim_create_buf(false, true)
-        return vim.range(buf, 0, 0, 0, 4):has(vim.range(buf, 0, 0, 0, 0))
+        return vim.range(0, 0, 0, 0, 4):has(vim.range(0, 0, 0, 0, 0))
+      end)
+    )
+
+    eq(
+      false,
+      exec_lua(function()
+        return vim.range(0, 0, 0, 0, 4):has(vim.range(0, 0, 4, 0, 4))
+      end)
+    )
+  end)
+
+  it('an empty range contains no other range', function()
+    eq(
+      false,
+      exec_lua(function()
+        return vim.range(0, 1, 0, 1, 0):has(vim.range(0, 1, 0, 1, 0))
+      end)
+    )
+    eq(
+      false,
+      exec_lua(function()
+        return vim.range(0, 1, 0, 1, 0):has(vim.range(0, 1, 0, 2, 0))
+      end)
+    )
+    eq(
+      false,
+      exec_lua(function()
+        return vim.range(0, 1, 0, 1, 0):has(vim.range(0, 0, 0, 1, 0))
+      end)
+    )
+  end)
+
+  it('an empty range intersercts with no other range', function()
+    eq(
+      nil,
+      exec_lua(function()
+        return vim.range(0, 1, 0, 1, 0):intersect(vim.range(0, 1, 0, 1, 0))
+      end)
+    )
+    eq(
+      nil,
+      exec_lua(function()
+        return vim.range(0, 1, 0, 1, 0):intersect(vim.range(0, 1, 0, 2, 0))
+      end)
+    )
+    eq(
+      nil,
+      exec_lua(function()
+        return vim.range(0, 1, 0, 1, 0):intersect(vim.range(0, 0, 0, 1, 0))
+      end)
+    )
+  end)
+
+  it('empty range comparison semantics', function()
+    eq(
+      true,
+      exec_lua(function()
+        return vim.range(0, 0, 0, 0, 0) < vim.range(0, 0, 0, 0, 1)
+      end)
+    )
+
+    eq(
+      true,
+      exec_lua(function()
+        return vim.range(0, 1, 0, 1, 0) < vim.range(0, 1, 0, 1, 1)
+      end)
+    )
+
+    eq(
+      true,
+      exec_lua(function()
+        return vim.range(0, 1, 1, 1, 1) > vim.range(0, 1, 0, 1, 1)
+      end)
+    )
+  end)
+
+  it('1 byte wide range is not empty', function()
+    eq(
+      false,
+      exec_lua(function()
+        return vim.range(0, 1, 0, 1, 1):is_empty()
       end)
     )
   end)

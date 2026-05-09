@@ -57,6 +57,7 @@
 #include "nvim/highlight_group.h"
 #include "nvim/indent.h"
 #include "nvim/input.h"
+#include "nvim/lua/executor.h"
 #include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/mark.h"
@@ -3671,15 +3672,14 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const int cmdpreview_n
   // check for a trailing count
   cmd = skipwhite(cmd);
   if (ascii_isdigit(*cmd)) {
-    i = getdigits_int(&cmd, true, INT_MAX);
+    const char *const count_arg = cmd;
+    i = getdigits_int(&cmd, false, INT_MAX);
     if (i <= 0 && !eap->skip && subflags.do_error) {
       emsg(_(e_zerocount));
       xfree(sub);
       return 0;
     } else if (i >= INT_MAX) {
-      char buf[20];
-      vim_snprintf(buf, sizeof(buf), "%d", i);
-      semsg(_(e_val_too_large), buf);
+      semsg(_(e_val_too_large_len), (int)(cmd - count_arg), count_arg);
       xfree(sub);
       return 0;
     }
@@ -5034,54 +5034,8 @@ char *skip_vimgrep_pat(char *p, char **s, int *flags)
   return p;
 }
 
-/// List v:oldfiles in a nice way.
+/// `:oldfiles` (sync) and `:browse oldfiles` (async).
 void ex_oldfiles(exarg_T *eap)
 {
-  list_T *l = get_vim_var_list(VV_OLDFILES);
-  int nr = 0;
-
-  if (l == NULL) {
-    msg(_("No old files"), 0);
-    return;
-  }
-
-  msg_start();
-  msg_scroll = true;
-  TV_LIST_ITER(l, li, {
-    if (got_int) {
-      break;
-    }
-    nr++;
-    const char *fname = tv_get_string(TV_LIST_ITEM_TV(li));
-    if (!message_filtered(fname)) {
-      msg_outnum(nr);
-      msg_puts(": ");
-      msg_outtrans(tv_get_string(TV_LIST_ITEM_TV(li)), 0, false);
-      msg_clr_eos();
-      msg_putchar('\n');
-      os_breakcheck();
-    }
-  });
-
-  // Assume "got_int" was set to truncate the listing.
-  got_int = false;
-
-  // File selection prompt on ":browse oldfiles"
-  if (cmdmod.cmod_flags & CMOD_BROWSE) {
-    quit_more = false;
-    nr = prompt_for_input(NULL, 0, false, NULL);
-    msg_starthere();
-    if (nr > 0 && nr <= tv_list_len(l)) {
-      const char *const p = tv_list_find_str(l, nr - 1);
-      if (p == NULL) {
-        return;
-      }
-      char *const s = expand_env_save((char *)p);
-      eap->arg = s;
-      eap->cmdidx = CMD_edit;
-      cmdmod.cmod_flags &= ~CMOD_BROWSE;
-      do_exedit(eap, NULL);
-      xfree(s);
-    }
-  }
+  nlua_call_excmd("vim._core.ex_cmd", "ex_oldfiles", eap, &cmdmod, NULL);
 }

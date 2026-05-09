@@ -1326,16 +1326,6 @@ static void normal_check_text_changed(NormalState *s)
   }
 }
 
-static void normal_check_buffer_modified(NormalState *s)
-{
-  // Trigger BufModified if 'modified' changed.
-  if (!finish_op && has_event(EVENT_BUFMODIFIEDSET)
-      && curbuf->b_changed_invalid == true) {
-    apply_autocmds(EVENT_BUFMODIFIEDSET, NULL, NULL, false, curbuf);
-    curbuf->b_changed_invalid = false;
-  }
-}
-
 /// If nothing is pending and we are going to wait for the user to
 /// type a character, trigger SafeState.
 static void normal_check_safe_state(NormalState *s)
@@ -1451,7 +1441,6 @@ static int normal_check(VimState *state)
     normal_check_cursor_moved(s);
     normal_check_text_changed(s);
     normal_check_window_scrolled(s);
-    normal_check_buffer_modified(s);
     normal_check_safe_state(s);
 
     // Updating diffs from changed() does not always work properly,
@@ -2769,7 +2758,7 @@ static void nv_zet(cmdarg_T *cap)
   int old_fdl = (int)curwin->w_p_fdl;
   int old_fen = curwin->w_p_fen;
 
-  int siso = get_sidescrolloff_value(curwin);
+  int64_t siso = get_sidescrolloff_value(curwin);
 
   if (ascii_isdigit(nchar) && !nv_z_get_count(cap, &nchar)) {
     return;
@@ -2890,7 +2879,7 @@ static void nv_zet(cmdarg_T *cap)
         getvcol(curwin, &curwin->w_cursor, &col, NULL, NULL, 0);
       }
       if (col > siso) {
-        col -= siso;
+        col -= (int)siso;
       } else {
         col = 0;
       }
@@ -2912,8 +2901,10 @@ static void nv_zet(cmdarg_T *cap)
       int n = curwin->w_view_width - win_col_off(curwin);
       if (col + siso < n) {
         col = 0;
+      } else if (siso - n < INT_MAX - col) {
+        col = (int)(col + siso - n + 1);
       } else {
-        col = col + siso - n + 1;
+        col = INT_MAX;
       }
       if (curwin->w_leftcol != col) {
         curwin->w_leftcol = col;
@@ -3298,6 +3289,15 @@ static void nv_Zet(cmdarg_T *cap)
     do_cmdline_cmd("q!");
     break;
 
+  // "ZR": restart. With count, restart without checking for changes.
+  case 'R':
+    if (cap->count0 >= 1) {
+      do_cmdline_cmd("restart +qall!");
+    } else {
+      do_cmdline_cmd("restart");
+    }
+    break;
+
   default:
     clearopbeep(cap->oap);
   }
@@ -3622,7 +3622,7 @@ bool get_visual_text(cmdarg_T *cap, char **pp, size_t *lenp)
 static void nv_tagpop(cmdarg_T *cap)
 {
   if (!checkclearopq(cap->oap)) {
-    do_tag("", DT_POP, cap->count1, false, true);
+    do_tag(NULL, "", DT_POP, cap->count1, false, true);
   }
 }
 
@@ -5167,7 +5167,7 @@ static void nv_suspend(cmdarg_T *cap)
   if (VIsual_active) {
     end_visual_mode();                  // stop Visual mode
   }
-  do_cmdline_cmd("st");
+  do_cmdline_cmd("stop");
 }
 
 /// "gv": Reselect the previous Visual area.  If Visual already active,
@@ -5877,7 +5877,7 @@ static void set_op_var(int optype)
 
 /// Handle linewise operator "dd", "yy", etc.
 ///
-/// "_" is is a strange motion command that helps make operators more logical.
+/// "_" is a strange motion command that helps make operators more logical.
 /// It is actually implemented, but not documented in the real Vi.  This motion
 /// command actually refers to "the current line".  Commands like "dd" and "yy"
 /// are really an alternate form of "d_" and "y_".  It does accept a count, so

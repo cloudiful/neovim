@@ -12,7 +12,8 @@
 ---
 ---Uses Git to manage plugins and requires present `git` executable.
 ---Target plugins should be Git repositories with versions as named tags
----following semver convention `v<major>.<minor>.<patch>`.
+---following semver convention `v<major>.<minor>.<patch>` (with or without `v` prefix).
+---Like `v1.2.0` or `1.2.0`, but not `1.2` or `v1`.
 ---
 ---The latest state of all managed plugins is stored inside a [vim.pack-lockfile]()
 ---located at `$XDG_CONFIG_HOME/nvim/nvim-pack-lock.json`. It is a JSON file that
@@ -167,7 +168,7 @@
 ---- [PackChangedPre]() - before trying to change plugin's state.
 ---- [PackChanged]() - after plugin's state has changed.
 ---
----Each event populates the following |event-data| fields:
+---The |event-data| has these keys (type: `vim.event.packchanged.data`):
 ---- `active` - whether plugin was added via |vim.pack.add()| to current session.
 ---- `kind` - one of "install" (install on disk; before loading),
 ---  "update" (update already installed plugin; might be not loaded),
@@ -255,6 +256,10 @@ local function git_cmd(cmd, cwd)
   return (stdout:gsub('\n+$', ''))
 end
 
+local function parse_semver(x)
+  return vim.version.parse(x, { strict = true })
+end
+
 --- @type vim.Version
 local git_version
 
@@ -274,7 +279,7 @@ local function git_clone(url, path)
 
   if vim.startswith(url, 'file://') then
     cmd[#cmd + 1] = '--no-hardlinks'
-  elseif git_version >= vim.version.parse('2.27') then
+  elseif git_version >= parse_semver('2.27.0') then
     cmd[#cmd + 1] = '--filter=blob:none'
   end
 
@@ -343,7 +348,7 @@ end
 --- @param x string
 --- @return boolean
 local function is_semver(x)
-  return vim.version.parse(x) ~= nil
+  return parse_semver(x) ~= nil
 end
 
 local function is_nonempty_string(x)
@@ -430,7 +435,7 @@ local function normalize_plugs(plugs)
     local p_data = plug_map[p.path]
     -- TODO(echasnovski): if both versions are `vim.VersionRange`, collect as
     -- their intersection. Needs `vim.version.intersect`.
-    p_data.plug.spec.version = vim.F.if_nil(p_data.plug.spec.version, p.spec.version)
+    p_data.plug.spec.version = vim.nonnil(p_data.plug.spec.version, p.spec.version)
 
     -- Ensure no conflicts
     local spec_ref = p_data.plug.spec
@@ -585,7 +590,7 @@ end
 local function get_last_semver_tag(tags, version_range)
   local last_tag, last_ver_tag --- @type string, vim.Version
   for _, tag in ipairs(tags) do
-    local ver_tag = vim.version.parse(tag)
+    local ver_tag = parse_semver(tag)
     if ver_tag then
       if version_range:has(ver_tag) and (not last_ver_tag or ver_tag > last_ver_tag) then
         last_tag, last_ver_tag = tag, ver_tag
@@ -667,7 +672,7 @@ local function checkout(p, timestamp, skip_stash)
 
   if not skip_stash then
     local stash_cmd = { 'stash' }
-    if git_version > vim.version.parse('2.13') then
+    if git_version > parse_semver('2.13.0') then
       -- Use 'push' to avoid a 'stash -m' bug in versions prior to git v2.26
       stash_cmd[#stash_cmd + 1] = 'push'
       stash_cmd[#stash_cmd + 1] = '--message'
@@ -680,7 +685,7 @@ local function checkout(p, timestamp, skip_stash)
   git_cmd({ 'checkout', '--quiet', p.info.sha_target }, p.path)
 
   local submodule_cmd = { 'submodule', 'update', '--init', '--recursive' }
-  if git_version >= vim.version.parse('2.36') then
+  if git_version >= parse_semver('2.36.0') then
     submodule_cmd[#submodule_cmd + 1] = '--filter=blob:none'
   end
   git_cmd(submodule_cmd, p.path)
@@ -760,7 +765,7 @@ local function infer_update_details(p)
   end
 
   local older_tags = ''
-  if git_version >= vim.version.parse('2.13') then
+  if git_version >= parse_semver('2.13.0') then
     older_tags = git_cmd({ 'tag', '--list', '--no-contains', sha_head }, p.path)
   end
   local cur_tags = git_cmd({ 'tag', '--list', '--points-at', sha_head }, p.path)
@@ -959,7 +964,7 @@ local function lock_read(confirm, specs)
     plugin_lock = { plugins = {} }
   end
 
-  lock_sync(vim.F.if_nil(confirm, true), vim.F.if_nil(specs, {}))
+  lock_sync(vim.nonnil(confirm, true), vim.nonnil(specs, {}))
 end
 
 --- @class vim.pack.keyset.add
@@ -1242,13 +1247,16 @@ end
 --- - |]]| and |[[| to navigate through plugin sections.
 ---
 --- Some features are provided via LSP:
+--- - 'textDocument/documentLink' - compute links for plugin paths, sources,
+---   commits, and tags. Makes a best effort educated guess about a link structure.
+---   Use |gx| to open a link to an object at cursor.
 --- - 'textDocument/documentSymbol' (`gO` via |lsp-defaults| or |vim.lsp.buf.document_symbol()|) -
 ---   show structure of the buffer.
 --- - 'textDocument/hover' (`K` via |lsp-defaults| or |vim.lsp.buf.hover()|) - show more
 ---   information at cursor. Like details of particular pending change or newer tag.
 --- - 'textDocument/codeAction' (`gra` via |lsp-defaults| or |vim.lsp.buf.code_action()|) - show
----   code actions relevant for "plugin at cursor". Like "delete" (if plugin is not active),
----   "update" or "skip updating" (if there are pending updates).
+---   code actions relevant for "plugin at cursor". Like "delete" (after extra confirmation for
+---   active plugins), "update" or "skip updating" (if there are pending updates).
 ---
 --- @param names? string[] List of plugin names to update. Must be managed
 --- by |vim.pack|, not necessarily already added to current session.

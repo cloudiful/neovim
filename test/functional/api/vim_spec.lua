@@ -29,7 +29,6 @@ local next_msg = n.next_msg
 local tmpname = t.tmpname
 local write_file = t.write_file
 local exec_lua = n.exec_lua
-local exc_exec = n.exc_exec
 local insert = n.insert
 local skip = t.skip
 
@@ -1228,6 +1227,67 @@ describe('API', function()
       end)
       run_streamed_paste_tests()
     end)
+    describe('stream: terminal buffer', function()
+      local eol = is_os('win') and '\r\n' or '\n'
+      before_each(function()
+        exec_lua(function()
+          _G.input = {}
+          _G.chan = vim.api.nvim_open_term(0, {
+            on_input = function(_, _, _, data)
+              if #data > 0 then
+                table.insert(_G.input, data)
+              end
+            end,
+            force_crlf = false,
+          })
+        end)
+      end)
+      local function run_terminal_streamed_paste_tests(check_dot_repeat)
+        it('without bracketed paste mode in terminal', function()
+          api.nvim_paste('AA\nBB\n', false, 1)
+          eq({ 'AA', eol, 'BB', eol }, exec_lua('return _G.input'))
+          api.nvim_paste('CC', false, 2)
+          eq({ 'AA', eol, 'BB', eol, 'CC' }, exec_lua('return _G.input'))
+          api.nvim_paste('\nDD', false, 3)
+          eq({ 'AA', eol, 'BB', eol, 'CC', eol, 'DD' }, exec_lua('return _G.input'))
+          if check_dot_repeat then
+            exec_lua('_G.input = {}')
+            feed('.')
+            eq({ 'AA', eol, 'BB', eol, 'CC', eol, 'DD' }, exec_lua('return _G.input'))
+          end
+        end)
+        it('with bracketed paste mode in terminal', function()
+          exec_lua([[vim.api.nvim_chan_send(_G.chan, '\027[?2004h')]])
+          api.nvim_paste('AA\nBB\n', false, 1)
+          eq({ '\027[200~', 'AA', eol, 'BB', eol }, exec_lua('return _G.input'))
+          api.nvim_paste('CC', false, 2)
+          eq({ '\027[200~', 'AA', eol, 'BB', eol, 'CC' }, exec_lua('return _G.input'))
+          api.nvim_paste('\nDD', false, 3)
+          eq(
+            { '\027[200~', 'AA', eol, 'BB', eol, 'CC', eol, 'DD', '\027[201~' },
+            exec_lua('return _G.input')
+          )
+          if check_dot_repeat then
+            exec_lua('_G.input = {}')
+            feed('.')
+            eq(
+              { '\027[200~', 'AA', eol, 'BB', eol, 'CC', eol, 'DD', '\027[201~' },
+              exec_lua('return _G.input')
+            )
+          end
+        end)
+      end
+      describe('in Normal mode', function()
+        run_terminal_streamed_paste_tests(true)
+      end)
+      describe('in Terminal mode', function()
+        before_each(function()
+          feed('i')
+          eq({ mode = 't', blocking = false }, api.nvim_get_mode())
+        end)
+        run_terminal_streamed_paste_tests(false)
+      end)
+    end)
     it('non-streaming', function()
       -- With final "\n".
       api.nvim_paste('line 1\nline 2\nline 3\n', true, -1)
@@ -1947,7 +2007,6 @@ describe('API', function()
     it('getting current buffer option does not adjust cursor #19381', function()
       command('new')
       local buf = api.nvim_get_current_buf()
-      print(vim.inspect(api.nvim_get_current_buf()))
       local win = api.nvim_get_current_win()
       insert('some text')
       feed('0v$')
@@ -2818,7 +2877,7 @@ describe('API', function()
 
     it('stream=job channel', function()
       eq(3, eval("jobstart(['cat'], {'rpc': v:true})"))
-      local catpath = eval('exepath("cat")')
+      local catpath = vim.fs.normalize(eval('exepath("cat")'))
       local info = {
         stream = 'job',
         id = 3,
@@ -2877,7 +2936,7 @@ describe('API', function()
       eq(1, api.nvim_get_current_buf())
       eq(3, api.nvim_get_option_value('channel', { buf = 1 }))
 
-      local info = term_channel_info(3, 1, { eval('exepath(&shell)') })
+      local info = term_channel_info(3, 1, { vim.fs.normalize(eval('exepath(&shell)')) })
       local event = api.nvim_get_var('opened_event')
       if not is_os('win') then
         info.pty = event.info.pty
@@ -2918,9 +2977,10 @@ describe('API', function()
 
       -- :terminal with args + stopped process (shell-test).
       command('enew')
-      argv = { n.testprg('shell-test'), 'INTERACT' }
+      -- Use a process that doesn't read stdin, so PTY EOF can't race SIGHUP.
+      argv = { n.testprg('shell-test'), 'HOLD' }
       fn.jobstart(argv, { term = true })
-      screen:expect({ any = { vim.pesc('interact $') } })
+      screen:expect({ any = { vim.pesc('holding $') } })
       eq(1, eval('jobstop(&channel)'))
       eval('jobwait([&channel], 1000)') -- Wait.
       local expected3 = term_channel_info(5, 3, argv)
@@ -3595,7 +3655,7 @@ describe('API', function()
 
       eq(
         'Vim(echo):E5555: API call: Vim:E220: Missing }.',
-        exc_exec("echo nvim_get_runtime_file('{', v:false)")
+        pcall_err(command, "echo nvim_get_runtime_file('{', v:false)")
       )
     end)
     it('preserves order of runtimepath', function()
@@ -3828,6 +3888,8 @@ describe('API', function()
       eq("Invalid 'id': -1", pcall_err(api.nvim_echo, { { 'foo' } }, false, { id = -1 }))
       -- String ids are always allowed (user-defined).
       eq('my.msg.id', api.nvim_echo({ { 'foo' } }, false, { id = 'my.msg.id' }))
+      local opts = { kind = 'progress', source = 'nvim', status = 'success' }
+      eq("Invalid 'source': 'nvim'", pcall_err(api.nvim_echo, { { '' } }, 1, opts))
     end)
 
     it('should clear cmdline message before echo', function()
@@ -5336,7 +5398,7 @@ describe('API', function()
         end, { nargs = 1 })
       ]])
       eq(
-        uv.cwd(),
+        t.fix_slashes(assert(uv.cwd())),
         api.nvim_cmd(
           { cmd = 'Foo', args = { '%:p:h' }, magic = { file = true } },
           { output = true }

@@ -950,8 +950,8 @@ vim.go.cb = vim.go.clipboard
 
 --- Number of screen lines to use for the command-line.  Helps avoiding
 --- `hit-enter` prompts.
---- The value of this option is stored with the tab page, so that each tab
---- page can have a different value.
+--- The value of this option is stored with the tabpage, so that each
+--- tabpage can have a different value.
 ---
 --- When 'cmdheight' is zero, there is no command-line unless it is being
 --- used.  The command-line will cover the last line of the screen when
@@ -1203,8 +1203,16 @@ vim.go.cia = vim.go.completeitemalign
 --- 	    'ignorecase' is set without 'infercase'.
 --- 	    See also `preinserted()`.
 ---
----    preselect   Selects the first completion item whose "preselect"
---- 	    field is set, if any. Takes precedence over "noselect".
+---    preselect
+--- 	    When one of `complete-items` has its "preselect" field set
+--- 	    (e.g., as indicated by an LSP server), select the first
+--- 	    such item in the `popupmenu-completion`. Takes precedence
+--- 	    over "noselect".
+---
+--- 	    Unlike the implicit selection behavior (when "noselect" is
+--- 	    not set), this preserves the original sort order and
+--- 	    navigates to the preselect item rather than always
+--- 	    selecting the first item.
 ---
 ---    preview  Show extra information about the currently selected
 --- 	    completion in the preview window.  Only works in
@@ -1799,7 +1807,7 @@ vim.go.dex = vim.go.diffexpr
 ---
 --- 	closeoff	When a window is closed where 'diff' is set
 --- 			and there is only one window remaining in the
---- 			same tab page with 'diff' set, execute
+--- 			same tabpage with 'diff' set, execute
 --- 			`:diffoff` in that window.  This undoes a
 --- 			`:diffsplit` command.
 ---
@@ -2617,7 +2625,8 @@ vim.go.fcs = vim.go.fillchars
 --- `String` and is the `:find` command argument.  The second argument is
 --- a `Boolean` and is set to `v:true` when the function is called to get
 --- a List of command-line completion matches for the `:find` command.
---- The function should return a List of strings.
+--- The function should return a List, which is handled similarly to the
+--- return value of a `:command-completion-customlist` function.
 ---
 --- The function is called only once per `:find` command invocation.
 --- The function can process all the directories specified in 'path'.
@@ -5480,8 +5489,8 @@ vim.go.sj = vim.go.scrolljump
 --- Minimal number of screen lines to keep above and below the cursor.
 --- This will make some context visible around where you are working.  If
 --- you set it to a very large value (999) the cursor line will always be
---- in the middle of the window (except at the start or end of the file or
---- when long lines wrap).
+--- in the middle of the window (except at the start or end of the file,
+--- see 'scrolloffpad', or when long lines wrap).
 --- After using the local value, go back the global value with one of
 --- these two:
 ---
@@ -5498,6 +5507,38 @@ vim.wo.scrolloff = vim.o.scrolloff
 vim.wo.so = vim.wo.scrolloff
 vim.go.scrolloff = vim.o.scrolloff
 vim.go.so = vim.go.scrolloff
+
+--- When 'scrolloff' and 'scrolloffpad' are greater than zero, allow
+--- the cursor to remain centered when at the end of the file.
+--- Normally, 'scrolloff' will not keep the cursor centered at the
+--- end of the file.
+---
+--- A value of 0 disables this feature.  Any value above 0 enables it.
+--- For a window-local value, -1 means to use the global value.
+--- Values below -1 are invalid.
+---
+--- Example:
+---
+--- ```vim
+--- 	:set scrolloff=99 scrolloffpad=1
+--- ```
+---
+--- After using the local value, go back the global value with one of
+--- these two:
+---
+--- ```vim
+--- 	setlocal scrolloffpad<
+--- 	setlocal scrolloffpad=-1
+--- ```
+---
+---
+--- @type integer
+vim.o.scrolloffpad = 0
+vim.o.sop = vim.o.scrolloffpad
+vim.wo.scrolloffpad = vim.o.scrolloffpad
+vim.wo.sop = vim.wo.scrolloffpad
+vim.go.scrolloffpad = vim.o.scrolloffpad
+vim.go.sop = vim.go.scrolloffpad
 
 --- This is a comma-separated list of words that specifies how
 --- 'scrollbind' windows should behave.  'sbo' stands for ScrollBind
@@ -5611,9 +5652,9 @@ vim.go.slm = vim.go.selectmode
 --- 		will become the current directory (useful with
 --- 		projects accessed over a network from different
 --- 		systems)
----    tabpages	all tab pages; without this only the current tab page
+---    tabpages	all tabpages; without this only the current tabpage
 --- 		is restored, so that you can make a session for each
---- 		tab page separately
+--- 		tabpage separately
 ---    terminal	include terminal windows where the command can be
 --- 		restored
 ---    winpos	position of the whole Vim window
@@ -5877,6 +5918,7 @@ vim.go.shcf = vim.go.shellcmdflag
 --- Note: When using a pipe like "| tee", you'll lose the exit code of the
 --- shell command.  This might be configurable by your shell, look for
 --- the pipefail option (for bash and zsh, use ":set -o pipefail").
+--- Only a single "%s" value is allowed.
 ---
 --- @type string
 vim.o.shellpipe = "| tee"
@@ -5919,6 +5961,8 @@ vim.go.shq = vim.go.shellquote
 --- explicitly set before.
 --- In the future pipes may be used for filtering and this option will
 --- become obsolete (at least for Unix).
+--- 							*E1577*
+--- Only a single "%s" item is allowed in the option value.
 ---
 --- @type string
 vim.o.shellredir = ">"
@@ -6010,8 +6054,9 @@ vim.o.sw = vim.o.shiftwidth
 vim.bo.shiftwidth = vim.o.shiftwidth
 vim.bo.sw = vim.bo.shiftwidth
 
---- This option helps to avoid all the `hit-enter` prompts caused by file
---- messages, for example with CTRL-G, and to avoid some other messages.
+--- Controls display of file messages (e.g. CTRL-G) and various other
+--- messages.
+---
 --- It is a list of flags:
 ---  flag	meaning when present	~
 ---   l	use "999L, 888B" instead of "999 lines, 888 bytes"	*shm-l*
@@ -6058,6 +6103,9 @@ vim.bo.sw = vim.bo.shiftwidth
 --- 	search count statistics.  The maximum limit can be set with
 --- 	the 'maxsearchcount' option, see also `searchcount()`
 --- 	function.
+---   u	don't give undo and redo messages like			*shm-u*
+--- 	"1 line less; before #1  1 second ago", "Already at oldest
+--- 	change" or "Already at newest change"
 ---
 --- This gives you the opportunity to avoid that a change between buffers
 --- requires you to hit <Enter>, but still gives as useful a message as
@@ -6187,14 +6235,10 @@ vim.o.smd = vim.o.showmode
 vim.go.showmode = vim.o.showmode
 vim.go.smd = vim.go.showmode
 
---- The value of this option specifies when the line with tab page labels
---- will be displayed:
+--- Specifies when the `tabpage` labels will be displayed:
 --- 	0: never
---- 	1: only if there are at least two tab pages
+--- 	1: only if there are at least two tabpages
 --- 	2: always
---- This is both for the GUI and non-GUI implementation of the tab pages
---- line.
---- See `tab-page` for more information about tab pages.
 ---
 --- @type integer
 vim.o.showtabline = 1
@@ -6778,14 +6822,14 @@ vim.wo.stc = vim.wo.statuscolumn
 --- ( -   Start of item group.  Can be used for setting the width and
 ---       alignment of a section.  Must be followed by %) somewhere.
 --- ) -   End of item group.  No width fields allowed.
---- T N   For 'tabline': start of tab page N label.  Use %T or %X to end
+--- T N   For 'tabline': start of tabpage N label.  Use %T or %X to end
 ---       the label.  Clicking this label with left mouse button switches
----       to the specified tab page, while clicking it with middle mouse
----       button closes the specified tab page.
+---       to the specified tabpage, while clicking it with middle mouse
+---       button closes the specified tabpage.
 --- X N   For 'tabline': start of close tab N label.  Use %X or %T to end
 ---       the label, e.g.: %3Xclose%X.  Use %999X for a "close current
 ---       tab" label.  Clicking this label with left mouse button closes
----       the specified tab page.
+---       the specified tabpage.
 --- @ N   Start of execute function label. Use %X or %T to end the label,
 ---       e.g.: %10@SwitchBuffer@foo.c%X.  Clicking this label runs the
 ---       specified function: in the example when clicking once using left
@@ -6988,18 +7032,18 @@ vim.bo.swf = vim.bo.swapfile
 ---   `:sbnext`, or `:sbrewind`).
 --- Possible values (comma-separated list):
 ---    useopen	If included, jump to the first open window in the
---- 		current tab page that contains the specified buffer
+--- 		current tabpage that contains the specified buffer
 --- 		(if there is one).  Otherwise: Do not examine other
 --- 		windows.
----    usetab	Like "useopen", but also consider windows in other tab
---- 		pages.
+---    usetab	Like "useopen", but also consider windows in other
+--- 		tabpages.
 ---    split	If included, split the current window before loading
 --- 		a buffer for a `quickfix` command that display errors.
 --- 		Otherwise: do not split, use current window (when used
 --- 		in the quickfix window: the previously used window or
 --- 		split if there is no other window).
 ---    vsplit	Just like "split" but split vertically.
----    newtab	Like "split", but open a new tab page.  Overrules
+---    newtab	Like "split", but open a new tabpage.  Overrules
 --- 		"split" when both are present.
 ---    uselast	If included, jump to the previously used window when
 --- 		jumping to errors with `quickfix` commands.
@@ -7063,13 +7107,13 @@ vim.o.syn = vim.o.syntax
 vim.bo.syntax = vim.o.syntax
 vim.bo.syn = vim.bo.syntax
 
---- This option controls the behavior when closing tab pages (e.g., using
---- `:tabclose`).  When empty Vim goes to the next (right) tab page.
+--- This option controls the behavior when closing tabpages (e.g., using
+--- `:tabclose`).  When empty Vim goes to the next (right) tabpage.
 ---
 --- Possible values (comma-separated list):
----    left		If included, go to the previous tab page instead of
+---    left		If included, go to the previous tabpage instead of
 --- 		the next one.
----    uselast	If included, go to the previously used tab page if
+---    uselast	If included, go to the previously used tabpage if
 --- 		possible.  This option takes precedence over the
 --- 		others.
 ---
@@ -7079,14 +7123,14 @@ vim.o.tcl = vim.o.tabclose
 vim.go.tabclose = vim.o.tabclose
 vim.go.tcl = vim.go.tabclose
 
---- When non-empty, this option determines the content of the tab pages
+--- When non-empty, this option determines the content of the tabpages
 --- line at the top of the Vim window.  When empty Vim will use a default
---- tab pages line.  See `setting-tabline` for more info.
+--- tabpages line.  See `setting-tabline` for more info.
 ---
---- The tab pages line only appears as specified with the 'showtabline'
+--- The tabpages line only appears as specified with the 'showtabline'
 --- option and only when there is no GUI tab line.  When 'e' is in
 --- 'guioptions' and the GUI supports a tab line 'guitablabel' is used
---- instead.  Note that the two tab pages lines are very different.
+--- instead.  Note that the two tabpages lines are very different.
 ---
 --- The value is evaluated like with 'statusline'.  You can use
 --- `tabpagenr()`, `tabpagewinnr()` and `tabpagebuflist()` to figure out
@@ -7097,7 +7141,7 @@ vim.go.tcl = vim.go.tabclose
 --- trigger it to be updated, use `:redrawtabline`.
 --- This option cannot be set in a modeline when 'modelineexpr' is off.
 ---
---- Keep in mind that only one of the tab pages is the current one, others
+--- Keep in mind that only one of the tabpages is the current one, others
 --- are invisible and you can't jump to their windows.
 ---
 --- @type string
@@ -7106,7 +7150,7 @@ vim.o.tal = vim.o.tabline
 vim.go.tabline = vim.o.tabline
 vim.go.tal = vim.go.tabline
 
---- Maximum number of tab pages to be opened by the `-p` command line
+--- Maximum number of tabpages to be opened by the `-p` command line
 --- argument or the ":tab all" command. `tabpage`
 ---
 --- @type integer
@@ -7464,7 +7508,7 @@ vim.go.titleold = vim.o.titleold
 --- The default (empty) behaviour is equivalent to:
 ---
 --- ```vim
----     set titlestring=%t%(\ %M%)%(\ \(%{expand(\"%:~:h\")}\)%)%a\ -\ Nvim
+---     set titlestring=%t%(\ %M%)%(\ \(%{expand('%:p:~:h')}\)%)%a\ -\ Nvim
 --- ```
 ---
 --- Example:
@@ -7519,6 +7563,27 @@ vim.o.ttimeoutlen = 50
 vim.o.ttm = vim.o.ttimeoutlen
 vim.go.ttimeoutlen = vim.o.ttimeoutlen
 vim.go.ttm = vim.go.ttimeoutlen
+
+--- Enables Nvim `TUI` features which assume a fast (usually local) host
+--- terminal. During startup, Nvim queries the terminal (for 'background'
+--- detection, etc.) and must wait for a response (or timeout).
+---
+--- If your terminal environment is slow (e.g. remote SSH), or broken
+--- (doesn't respond to queries), Nvim startup may be slower. Therefore
+--- you can disable this option by setting the `$NVIM_NOTTYFAST`
+--- environment variable before starting Nvim:
+--- ```
+--- 	NVIM_NOTTYFAST=1 nvim
+--- ```
+---
+--- The queries are performed early, before `--cmd` and user `config`, so
+--- `:set nottyfast` in your config happens too late.
+---
+--- @type boolean
+vim.o.ttyfast = true
+vim.o.tf = vim.o.ttyfast
+vim.go.ttyfast = vim.o.ttyfast
+vim.go.tf = vim.go.ttyfast
 
 --- List of directory names for undo files, separated with commas.
 --- See 'backupdir' for details of the format.
@@ -7997,8 +8062,12 @@ vim.go.wmnu = vim.go.wildmenu
 --- 		applies to buffer name completion.
 --- "noselect"	If 'wildmenu' is enabled, show the menu but do not
 --- 		preselect the first item.
---- If only one match exists, it is completed fully, unless "noselect" is
---- specified.
+--- "noinsert"	If 'wildmenu' is enabled, show the menu and preselect
+--- 		the first match, but do not insert it in the command
+--- 		line.  If both "noinsert" and "noselect" are present,
+--- 		"noselect" takes precedence.
+--- If only one match exists, it is completed fully, unless "noselect" or
+--- "noinsert" is specified.
 ---
 --- Some useful combinations of colon-separated values:
 --- "longest:full"		Start with the longest common string and show
@@ -8315,6 +8384,16 @@ vim.o.winminwidth = 1
 vim.o.wmw = vim.o.winminwidth
 vim.go.winminwidth = vim.o.winminwidth
 vim.go.wmw = vim.go.winminwidth
+
+--- If enabled, the window is pinned and will not be closed by `:only`
+--- and `:fclose`. Only commands specifically targeting the window can
+--- close it.
+---
+--- @type boolean
+vim.o.winpinned = false
+vim.o.wp = vim.o.winpinned
+vim.wo.winpinned = vim.o.winpinned
+vim.wo.wp = vim.wo.winpinned
 
 --- Minimal number of columns for the current window.  This is not a hard
 --- minimum, Vim will use fewer columns if there is not enough room.  If

@@ -748,9 +748,21 @@ function CompletionResolver:request(bufnr, param, selected_word)
         return
       end
 
-      local value = vim.tbl_get(result, 'documentation', 'value')
+      local value = vim.tbl_get(result, 'documentation', 'value') --[[@as string?]]
       local kind = vim.tbl_get(result, 'documentation', 'kind')
       local text_format = vim.tbl_get(result, 'insertTextFormat')
+
+      if result.detail and result.detail ~= '' then
+        if not value then
+          value = ('```%s\n%s\n```'):format(vim.bo.filetype, result.detail)
+          kind = kind or lsp.protocol.MarkupKind.Markdown
+        elseif not value:find(result.detail, 1, true) then
+          local detail_block = ('```%s\n%s\n```'):format(vim.bo.filetype, result.detail)
+          value = detail_block .. '\n' .. value
+          kind = kind or lsp.protocol.MarkupKind.Markdown
+        end
+      end
+
       if not value then
         if text_format ~= protocol.InsertTextFormat.Snippet then
           return
@@ -992,7 +1004,13 @@ local function trigger(bufnr, clients, ctx)
       end
 
       local result = response.result
-      if result and #(result.items or result) > 0 then
+      if type(result) == 'table' and result.items == vim.NIL then
+        error(
+          ('%s: completion response has items=null, expected CompletionItem[]'):format(
+            client and client.name or 'UNKNOWN'
+          )
+        )
+      elseif not vim.isnil(result) and #(result.items or result) > 0 then
         Context.isIncomplete = Context.isIncomplete or result.isIncomplete
         local encoding = client and client.offset_encoding or 'utf-16'
         local client_matches, tmp_server_start_boundary

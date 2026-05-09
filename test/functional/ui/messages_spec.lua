@@ -5,6 +5,7 @@ local Screen = require('test.functional.ui.screen')
 local clear, feed = n.clear, n.feed
 local eval = n.eval
 local eq = t.eq
+local pcall_err = t.pcall_err
 local neq = t.neq
 local command = n.command
 local set_method_error = n.set_method_error
@@ -14,7 +15,6 @@ local nvim_prog = n.nvim_prog
 local testprg = n.testprg
 local exec = n.exec
 local exec_capture = n.exec_capture
-local exc_exec = n.exc_exec
 local exec_lua = n.exec_lua
 local poke_eventloop = n.poke_eventloop
 local assert_alive = n.assert_alive
@@ -95,7 +95,12 @@ describe('ui/ext_messages', function()
         {1:~                        }|*3
       ]],
       messages = {
-        { content = { { writemsg } }, history = true, kind = 'bufwrite' },
+        {
+          content = { { writemsg } },
+          history = true,
+          id = 'nvim.bufwrite "Xtest_functional_ui_messages_spec"',
+          kind = 'progress',
+        },
         {
           content = { { 'W10: Warning: Changing a readonly file', 19, 'WarningMsg' } },
           history = true,
@@ -400,7 +405,8 @@ describe('ui/ext_messages', function()
         {
           content = { { '' } },
           pos = 0,
-          prompt = 'Type number and <Enter> (q or empty cancels): ',
+          -- Default vim.ui.select uses this prompt.
+          prompt = 'Type number and <Enter> or click with the mouse (q or empty cancels): ',
         },
       },
       -- Message depends on runtimepath, only test the static text...
@@ -408,13 +414,12 @@ describe('ui/ext_messages', function()
         for _, msg in ipairs(screen.messages) do
           eq(false, msg.history)
           eq('confirm', msg.kind)
-          eq('  # pri kind tag', msg.content[1][2])
-          eq('\n                        ', msg.content[2][2])
-          eq('file\n', msg.content[3][2])
-          eq('> 1 F        ', msg.content[4][2])
-          eq('help.txt', msg.content[5][2])
-          eq(' \n                        ', msg.content[6][2])
-          eq('\n               *help.txt*', msg.content[#msg.content][2])
+          local text = '' -- Concatenate all chunks.
+          for _, chunk in ipairs(msg.content) do
+            text = text .. (#chunk >= 2 and chunk[2] or chunk[1])
+          end
+          t.matches('^Select a tag:\n', text)
+          t.matches('1: > F%s+help%.txt%s+', text)
         end
         screen.messages = {}
       end,
@@ -575,6 +580,25 @@ describe('ui/ext_messages', function()
         {1:~                        }|*3
       ]],
       messages = { { content = { { '  foldclose=' } }, history = true, kind = 'list_cmd' } },
+    })
+
+    -- Indent message
+    feed('A2\nline 3<Esc>gg=G')
+    screen:expect({
+      grid = [[
+        ^line 1                   |
+        line 2                   |
+        line 3                   |
+        {1:~                        }|*2
+      ]],
+      messages = {
+        {
+          content = { { '3 lines indented ' } },
+          kind = 'progress',
+          id = 'nvim.indent',
+          history = true,
+        },
+      },
     })
   end)
 
@@ -1272,7 +1296,7 @@ stack traceback:
       },
       messages = {
         {
-          content = { { 'Change "helllo" to:\n 1 "Hello"\n 2 "Hallo"\n 3 "Hullo"' } },
+          content = { { 'Change "helllo" to:\n1: "Hello"\n2: "Hallo"\n3: "Hullo"' } },
           kind = 'confirm',
         },
       },
@@ -1383,7 +1407,8 @@ stack traceback:
       messages = {
         {
           content = { { string.format('"%s" [New] 0L, 0B written', fname) } },
-          kind = 'bufwrite',
+          kind = 'progress',
+          id = 'nvim.bufwrite "Xtest_functional_ui_messages_spec"',
           history = true,
         },
       },
@@ -1629,7 +1654,8 @@ stack traceback:
       messages = {
         {
           content = { { 'Scanning tags.', 6, 'Question' } },
-          kind = 'completion',
+          kind = 'progress',
+          id = 'nvim.completion',
         },
       },
       showmode = {
@@ -2517,7 +2543,7 @@ describe('ui/msg_puts_printf', function()
         cmd = 'chcp 932 > NUL & '
       end
     else
-      if exc_exec('lang ja_JP.UTF-8') ~= 0 then
+      if not pcall(n.command, 'lang ja_JP.UTF-8') then
         pending('Locale ja_JP.UTF-8 not supported', function() end)
         return
       end
@@ -3597,7 +3623,7 @@ describe('progress-message', function()
 
     eq(
       "Conflict: title/source/status/percent/data not allowed with kind='echo'",
-      t.pcall_err(api.nvim_echo, { { 'test-message' } }, false, { percent = 10 })
+      t.pcall_err(api.nvim_echo, { { 'test-message' } }, false, { percent = 0 })
     )
 
     eq(

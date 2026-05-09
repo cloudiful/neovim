@@ -4,6 +4,7 @@ local n = require('test.functional.testnvim')()
 local clear = n.clear
 local exec_lua = n.exec_lua
 local eq = t.eq
+local pcall_err = t.pcall_err
 
 local function system_sync(cmd, opts)
   return exec_lua(function()
@@ -71,6 +72,17 @@ describe('vim.system', function()
 
       it('handle input', function()
         eq('hellocat', system({ 'cat' }, { stdin = 'hellocat', text = true }).stdout)
+      end)
+
+      it('uses real pipes for stdin/stdout #35984', function()
+        if t.is_os('win') then
+          return -- Not applicable for Windows.
+        end
+        local res = system(
+          { 'bash', '-c', 'wc /dev/stdin > /dev/stdout' },
+          { stdin = 'pipe\npipy text\n' }
+        )
+        eq({ '2', '3', '15', '/dev/stdin' }, vim.split(res.stdout, '%s+', { trimempty = true }))
       end)
 
       it('can set environment', function()

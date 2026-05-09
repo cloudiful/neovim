@@ -14,6 +14,7 @@
 #include "klib/kvec.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
+#include "nvim/api/vim.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer_defs.h"
@@ -314,7 +315,7 @@ static int is_multihl = 0;
 ///
 /// @param hl_msg Message chunks
 /// @param msg_data Additional data for progress messages
-static HlMessage format_progress_message(HlMessage hl_msg, MessageData *msg_data)
+static bool format_progress_message(HlMessage *hl_msg, MessageData *msg_data)
 {
   HlMessage updated_msg = KV_INITIAL_VALUE;
   // progress messages are special. displayed as "title: percent% msg"
@@ -332,28 +333,26 @@ static HlMessage format_progress_message(HlMessage hl_msg, MessageData *msg_data
     } else if (strequal(msg_data->status.data, "cancel")) {
       hl_id = syn_check_group("WarningMsg", STRLEN_LITERAL("WarningMsg"));
     }
-    kv_push(updated_msg,
-            ((HlMessageChunk){ .text = copy_string(msg_data->title, NULL), .hl_id = hl_id }));
-    kv_push(updated_msg, ((HlMessageChunk){ .text = cstr_to_string(": "), .hl_id = 0 }));
+    kv_push(updated_msg, ((HlMessageChunk){ copy_string(msg_data->title, NULL), hl_id }));
+    kv_push(updated_msg, ((HlMessageChunk){ cstr_to_string(": "), 0 }));
   }
-  if (msg_data->percent > 0) {
+  if (msg_data->percent >= 0) {
     char percent_buf[10];
     vim_snprintf(percent_buf, sizeof(percent_buf), "%3ld%% ", (long)msg_data->percent);
     String percent = cstr_to_string(percent_buf);
     int hl_id = syn_check_group("WarningMsg", STRLEN_LITERAL("WarningMsg"));
-    kv_push(updated_msg, ((HlMessageChunk){ .text = percent, .hl_id = hl_id }));
+    kv_push(updated_msg, ((HlMessageChunk){ percent, hl_id }));
   }
 
   if (kv_size(updated_msg) != 0) {
-    for (uint32_t i = 0; i < kv_size(hl_msg); i++) {
-      kv_push(updated_msg,
-              ((HlMessageChunk){ .text = copy_string(kv_A(hl_msg, i).text, NULL),
-                                 .hl_id = kv_A(hl_msg, i).hl_id }));
+    for (uint32_t i = 0; i < kv_size(*hl_msg); i++) {
+      HlMessageChunk chunk = kv_A(*hl_msg, i);
+      kv_push(updated_msg, ((HlMessageChunk){ copy_string(chunk.text, NULL), chunk.hl_id }));
     }
-    return updated_msg;
-  } else {
-    return hl_msg;
+    *hl_msg = updated_msg;
+    return true;
   }
+  return false;
 }
 
 /// Print message chunks, each with their own highlight ID.
@@ -376,33 +375,29 @@ MsgID msg_multihl(MsgID id, HlMessage hl_msg, const char *kind, bool history, bo
     abort();
   }
 
+  bool hl_msg_updated = false;
   // don't display progress message in cmd when target doesn't have cmd
-  if (strequal(kind, "progress") && (progress_msg_target & PROGRESS_TARGET_CMD) == 0) {
-    *needs_msg_clear = true;
-    return id;
+  if (strequal(kind, "progress")) {
+    do_autocmd_progress(id, hl_msg, msg_data);
+    if ((progress_msg_target & PROGRESS_TARGET_CMD) == 0) {
+      *needs_msg_clear = true;
+      return id;
+    }
+    if (msg_data && format_progress_message(&hl_msg, msg_data)) {
+      *needs_msg_clear = true;
+      hl_msg_updated = true;
+    }
   }
 
   no_wait_return++;
   msg_start();
   msg_clr_eos();
   bool need_clear = false;
-  bool hl_msg_updated = false;
-  msg_ext_history = history;
   if (kind != NULL) {
     msg_ext_set_kind(kind);
   }
   msg_ext_skip_flush = true;
   msg_ext_id = id;
-
-  // progress message are special displayed as "title: percent% msg"
-  if (strequal(kind, "progress") && msg_data) {
-    HlMessage formated_message = format_progress_message(hl_msg, msg_data);
-    if (formated_message.items != hl_msg.items) {
-      *needs_msg_clear = true;
-      hl_msg_updated = true;
-      hl_msg = formated_message;
-    }
-  }
 
   for (uint32_t i = 0; i < kv_size(hl_msg); i++) {
     HlMessageChunk chunk = kv_A(hl_msg, i);
@@ -416,7 +411,7 @@ MsgID msg_multihl(MsgID id, HlMessage hl_msg, const char *kind, bool history, bo
   }
 
   if (history && kv_size(hl_msg)) {
-    msg_hist_add_multihl(hl_msg, false, msg_data);
+    msg_hist_add_multihl(hl_msg, false);
   }
 
   msg_ext_skip_flush = false;
@@ -1099,6 +1094,28 @@ char *msg_may_trunc(bool force, char *s)
   return s;
 }
 
+char *msg_progress(char *s, char *id, char *status, int hl_id, bool hist, bool trunc)
+{
+  if (hist && (!trunc || ui_has(kUIMessages))) {
+    msg_hist_add(s, -1, 0);
+  }
+  if (trunc) {
+    s = msg_may_trunc(false, s);
+  }
+  bool clear = false;
+  MessageData data = {
+    .source = cstr_as_string("nvim"),
+    .status = cstr_as_string(status),
+    .percent = -1,
+  };
+  HlMessage chunks = KV_INITIAL_VALUE;
+  kv_push(chunks, ((HlMessageChunk){ cstr_as_string(s), hl_id }));
+  msg_multihl(CSTR_AS_OBJ(id), chunks, "progress", false, false, &data, &clear);
+  kv_destroy(chunks);
+  ui_flush();
+  return s;
+}
+
 void hl_msg_free(HlMessage hl_msg)
 {
   for (size_t i = 0; i < kv_size(hl_msg); i++) {
@@ -1128,7 +1145,7 @@ static void msg_hist_add(const char *s, int len, int hl_id)
 
   HlMessage msg = KV_INITIAL_VALUE;
   kv_push(msg, ((HlMessageChunk){ text, hl_id }));
-  msg_hist_add_multihl(msg, false, NULL);
+  msg_hist_add_multihl(msg, false);
 }
 
 static bool do_clear_hist_temp = true;
@@ -1148,7 +1165,10 @@ void do_autocmd_progress(MsgID msg_id, HlMessage msg, MessageData *msg_data)
   PUT_C(data, "id", OBJECT_OBJ(msg_id));
   PUT_C(data, "text", ARRAY_OBJ(messages));
   if (msg_data != NULL) {
-    PUT_C(data, "percent", INTEGER_OBJ(msg_data->percent));
+    if (msg_data->percent >= 0) {
+      // If percent=nil we omit it, it means "indeterminate progress". #39029
+      PUT_C(data, "percent", INTEGER_OBJ(msg_data->percent));
+    }
     PUT_C(data, "source", STRING_OBJ(msg_data->source));
     PUT_C(data, "status", STRING_OBJ(msg_data->status));
     PUT_C(data, "title", STRING_OBJ(msg_data->title));
@@ -1162,7 +1182,7 @@ void do_autocmd_progress(MsgID msg_id, HlMessage msg, MessageData *msg_data)
   kv_destroy(messages);
 }
 
-static void msg_hist_add_multihl(HlMessage msg, bool temp, MessageData *msg_data)
+static void msg_hist_add_multihl(HlMessage msg, bool temp)
 {
   if (do_clear_hist_temp) {
     msg_hist_clear_temp();
@@ -3389,7 +3409,7 @@ void msg_ext_ui_flush(void)
         xfree(chunk);
       }
       xfree(tofree->items);
-      msg_hist_add_multihl(msg, true, NULL);
+      msg_hist_add_multihl(msg, true);
     }
     xfree(tofree);
     msg_ext_overwrite = false;

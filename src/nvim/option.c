@@ -365,7 +365,7 @@ void set_init_1(bool clean_arg)
   memmove(backupdir + 2, backupdir, backupdir_len + 1);
   memmove(backupdir, ".,", 2);
   set_string_default(kOptBackupdir, backupdir, true);
-  set_string_default(kOptViewdir, stdpaths_user_state_subpath("view", 2, true),
+  set_string_default(kOptViewdir, stdpaths_user_state_subpath("view", 2, false),
                      true);
   set_string_default(kOptDirectory, stdpaths_user_state_subpath("swap", 2, true),
                      true);
@@ -406,6 +406,12 @@ void set_init_1(bool clean_arg)
 
   // Expand environment variables and things like "~" for the defaults.
   set_init_expand_env();
+
+  // Allow disabling ttyfast during startup to disable features such as
+  // automatic background detection over slow connections.
+  if (os_env_exists("NVIM_NOTTYFAST", false)) {
+    set_option_value_give_err(kOptTtyfast, BOOLEAN_OPTVAL(false), 0);
+  }
 
   save_file_ff(curbuf);         // Buffer is unchanged
 
@@ -1579,6 +1585,7 @@ int do_set(char *arg, int opt_flags)
           arg++;
           // Only for :set command set global value of local options.
           set_options_default(opt_flags);
+          didset_options_all();
           didset_options();
           didset_options2();
           ui_refresh_options();
@@ -1778,7 +1785,7 @@ static char *option_expand(OptIndex opt_idx, const char *val)
   // For 'spellsuggest' expand after "file:".
   char **var = (char **)options[opt_idx].var;
   bool esc = var == &p_tags || var == &p_path;
-  expand_env_esc(val, NameBuff, MAXPATHL, esc, false,
+  expand_env_esc(val, NameBuff, MAXPATHL, esc ? (char *)" \t" : NULL, false,
                  (char **)options[opt_idx].var == &p_sps ? "file:" : NULL);
   if (strcmp(NameBuff, val) == 0) {   // they are the same
     return NULL;
@@ -1825,6 +1832,26 @@ static void didset_options2(void)
   tabstop_set(curbuf->b_p_vsts, &curbuf->b_p_vsts_array);
   xfree(curbuf->b_p_vts_array);
   tabstop_set(curbuf->b_p_vts,  &curbuf->b_p_vts_array);
+}
+
+/// Repair UI state after `:set all&`.
+///
+/// `set_options_default` resets option values via `set_option_default` and
+/// `set_option_direct` without invoking per-option `did_set` callbacks, so
+/// UI-derived state (cursor shape, statusline, tabline) can get out of sync.
+/// This function patches the known cases.
+///
+/// Note: We intentionally do not replay all `did_set` callbacks
+/// (`opt_did_set_cb`) because they have order-dependent side effects and
+/// old/new transition logic that does not hold when values are already reset.
+static void didset_options_all(void)
+{
+  const char *errmsg = parse_shape_opt(SHAPE_CURSOR);
+  assert(errmsg == NULL);
+  (void)errmsg;
+  last_status(false);
+  win_float_update_statusline();
+  win_new_screen_rows();
 }
 
 /// Check for string options that are NULL (normally only termcap options).
@@ -2033,9 +2060,9 @@ void set_option_sctx(OptIndex opt_idx, int opt_flags, sctx_T script_ctx)
   }
 }
 
-/// Apply the OptionSet autocommand.
-static void apply_optionset_autocmd(OptIndex opt_idx, int opt_flags, OptVal oldval, OptVal oldval_g,
-                                    OptVal oldval_l, OptVal newval, const char *errmsg)
+/// Execute OptionSet autocmd now (not deferred).
+void apply_optionset_autocmd_now(OptIndex opt_idx, int opt_flags, OptVal oldval, OptVal oldval_g,
+                                 OptVal oldval_l, OptVal newval, const char *errmsg)
 {
   // Don't do this while starting up, failure or recursively.
   if (starting || errmsg != NULL || *get_vim_var_str(VV_OPTION_TYPE) != NUL) {
@@ -2072,6 +2099,20 @@ static void apply_optionset_autocmd(OptIndex opt_idx, int opt_flags, OptVal oldv
   }
   apply_autocmds(EVENT_OPTIONSET, options[opt_idx].fullname, NULL, false, NULL);
   reset_v_option_vars();
+}
+
+/// For 'modified', the event is deferred.
+static void apply_optionset_autocmd(OptIndex opt_idx, int opt_flags, OptVal oldval, OptVal oldval_g,
+                                    OptVal oldval_l, OptVal newval, const char *errmsg)
+{
+  if (starting || errmsg != NULL) {
+    return;
+  }
+  if (opt_idx == kOptModified) {
+    aucmd_defer_modified(curbuf, newval.data.boolean);
+    return;
+  }
+  apply_optionset_autocmd_now(opt_idx, opt_flags, oldval, oldval_g, oldval_l, newval, errmsg);
 }
 
 /// Process the updated 'arabic' option value.
@@ -2393,7 +2434,7 @@ static const char *did_set_modified(optset_T *args)
     save_file_ff(buf);  // Buffer is unchanged
   }
   redraw_titles();
-  buf->b_modified_was_set = (int)args->os_newval.boolean;
+  buf->b_modified_was_set = !!(int)args->os_newval.boolean;
   return NULL;
 }
 
@@ -2629,6 +2670,8 @@ static const char *did_set_scrollbind(optset_T *args)
 
 #ifdef BACKSLASH_IN_FILENAME
 /// Process the updated 'shellslash' option value.
+/// TODO(ntdiary): Remove this once we're confident that the `shellslash`
+/// option is no longer needed.
 static const char *did_set_shellslash(optset_T *args FUNC_ATTR_UNUSED)
 {
   if (p_ssl) {
@@ -2641,10 +2684,11 @@ static const char *did_set_shellslash(optset_T *args FUNC_ATTR_UNUSED)
     pseps[0] = '\\';
   }
 
+  // TODO(ntdiary): Remove these in the follow PR.
   // need to adjust the file name arguments and buffer names.
-  buflist_slash_adjust();
-  alist_slash_adjust();
-  scriptnames_slash_adjust();
+  // buflist_slash_adjust();
+  // alist_slash_adjust();
+  // scriptnames_slash_adjust();
   return NULL;
 }
 #endif
@@ -3109,6 +3153,12 @@ static const char *validate_num_option(OptIndex opt_idx, OptInt *newval, char *e
   case kOptScrolloff:
     if (value < 0 && full_screen) {
       return e_positive;
+    }
+    break;
+  case kOptScrolloffpad:
+    // if (value < 0 && full_screen) {
+    if (value < 0) {
+      return e_invarg;
     }
     break;
   case kOptSidescrolloff:
@@ -3600,6 +3650,7 @@ static OptVal get_option_unset_value(OptIndex opt_idx)
     case kOptFsync:
       return BOOLEAN_OPTVAL(kNone);
     case kOptScrolloff:
+    case kOptScrolloffpad:
     case kOptSidescrolloff:
       return NUMBER_OPTVAL(-1);
     case kOptUndolevels:
@@ -3874,6 +3925,29 @@ static const char *set_option(const OptIndex opt_idx, OptVal value, int opt_flag
       return errmsg;
     }
   }
+
+#ifdef BACKSLASH_IN_FILENAME
+  // Ensure "/" slashes in various options.
+  uint32_t flags = options[opt_idx].flags;
+  if ((flags & kOptFlagExpand)
+      && opt_idx != kOptEqualprg
+      && opt_idx != kOptFormatprg
+      && opt_idx != kOptGrepprg
+      && opt_idx != kOptKeywordprg
+      && opt_idx != kOptMakeprg
+      && opt_idx != kOptShell) {
+    bool allow_comma = flags & kOptFlagComma;
+    bool allow_space = (opt_idx == kOptCdpath || opt_idx == kOptPath || opt_idx == kOptTags);
+    for (char *p = value.data.string.data; *p; p++) {
+      if (*p != '\\'
+          || (p[1] == ',' && allow_comma)
+          || (p[1] == ' ' && allow_space)) {
+        continue;
+      }
+      *p = '/';
+    }
+  }
+#endif
 
   vimoption_T *opt = &options[opt_idx];
   const bool scope_local = opt_flags & OPT_LOCAL;
@@ -4673,6 +4747,8 @@ void *get_varp_scope_from(vimoption_T *p, int opt_flags, buf_T *buf, win_T *win)
       return &(win->w_p_siso);
     case kOptScrolloff:
       return &(win->w_p_so);
+    case kOptScrolloffpad:
+      return &(win->w_p_sop);
     case kOptDefine:
       return &(buf->b_p_def);
     case kOptInclude:
@@ -4760,6 +4836,8 @@ void *get_varp_from(vimoption_T *p, buf_T *buf, win_T *win)
     return win->w_p_siso >= 0 ? &(win->w_p_siso) : p->var;
   case kOptScrolloff:
     return win->w_p_so >= 0 ? &(win->w_p_so) : p->var;
+  case kOptScrolloffpad:
+    return win->w_p_sop >= 0 ? &(win->w_p_sop) : p->var;
   case kOptBackupcopy:
     return *buf->b_p_bkc != NUL ? &(buf->b_p_bkc) : p->var;
   case kOptDefine:
@@ -4859,6 +4937,8 @@ void *get_varp_from(vimoption_T *p, buf_T *buf, win_T *win)
     return &(win->w_p_wfh);
   case kOptWinfixwidth:
     return &(win->w_p_wfw);
+  case kOptWinpinned:
+    return &(win->w_p_wp);
   case kOptPreviewwindow:
     return &(win->w_p_pvw);
   case kOptLhistory:
@@ -5119,6 +5199,7 @@ void copy_winopt(winopt_T *from, winopt_T *to)
   to->wo_crb_save = from->wo_crb_save;
   to->wo_siso = from->wo_siso;
   to->wo_so = from->wo_so;
+  to->wo_sop = from->wo_sop;
   to->wo_spell = from->wo_spell;
   to->wo_cuc = from->wo_cuc;
   to->wo_cul = from->wo_cul;
@@ -6548,21 +6629,28 @@ dict_T *get_winbuf_options(const int bufopt)
 
 /// Return the effective 'scrolloff' value for the current window, using the
 /// global value when appropriate.
-int get_scrolloff_value(win_T *wp)
+int64_t get_scrolloff_value(win_T *wp)
 {
   // Disallow scrolloff in terminal-mode. #11915
   // Still allow 'scrolloff' for non-terminal buffers. #34447
   if ((State & MODE_TERMINAL) && wp->w_buffer->terminal) {
     return 0;
   }
-  return (int)(wp->w_p_so < 0 ? p_so : wp->w_p_so);
+  return wp->w_p_so < 0 ? p_so : wp->w_p_so;
+}
+
+/// Return the effective 'scrolloffpad' value for the current window, using the
+/// global value when appropriate.
+int64_t get_scrolloffpad_value(win_T *wp)
+{
+  return wp->w_p_sop == -1 ? p_sop : curwin->w_p_sop;
 }
 
 /// Return the effective 'sidescrolloff' value for the current window, using the
 /// global value when appropriate.
-int get_sidescrolloff_value(win_T *wp)
+int64_t get_sidescrolloff_value(win_T *wp)
 {
-  return (int)(wp->w_p_siso < 0 ? p_siso : wp->w_p_siso);
+  return wp->w_p_siso < 0 ? p_siso : wp->w_p_siso;
 }
 
 Dict get_vimoption(String name, int opt_flags, buf_T *buf, win_T *win, Arena *arena, Error *err)

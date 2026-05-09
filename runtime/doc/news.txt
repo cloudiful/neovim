@@ -65,26 +65,32 @@ API
 • |nvim_create_autocmd()|, |nvim_exec_autocmds()| and |nvim_clear_autocmds()|
   no longer treat an empty non-nil pattern as nil.
 • |nvim_clear_autocmds()| no longer treats an empty array event as nil.
+• |ui-messages| `msg_show.bufwrite` and `msg_show.completion` messages are now
+  `msg_show.progress` events.
 
 DIAGNOSTICS
 
-• todo
+• `vim.diagnostic.Opts.Status.format` no longer accepts the table mapping
+  from severity to text. Use `vim.diagnostic.Opts.Signs.text` instead.
 
 EDITOR
 
+• On Windows, the |trust| db now stores paths with "/" slashes. This means the
+  trust store will be reset.
 • `stdpath("log")` moved to `stdpath("state")/logs`.
 
 EVENTS
 
-• todo
+• |BufModifiedSet| has been removed. Use the |OptionSet| event with pattern
+  "modified" instead.
 
 LSP
 
-• todo
+• `client.attached_buffers[buf]` now stores `languageId` string (was boolean).
 
 LUA
 
-• Added `__eq` metamethod to |vim.VersionRange|.
+• todo
 
 OPTIONS
 
@@ -108,10 +114,13 @@ API
 • |nvim_set_hl()| supports "font" key.
 • |nvim_open_win()| `zindex` controls whether the UI will use a dimmed cursor
   shape when an unfocused float is on top of the cursor.
+• |nvim_echo()| distinguishes zero percent from omitted percent for Progress
+  events.
+• |nvim_create_user_command()| accepts `desc` for Vimscript commands.
 
 BUILD
 
-• todo
+• Building using "zig build" requires zig 0.16.x.
 
 DEFAULTS
 
@@ -119,15 +128,22 @@ DEFAULTS
 
 DIAGNOSTICS
 
-• todo
+• |vim.diagnostic.status()| uses the severity names defined by the `signs`
+  field of |vim.diagnostic.config()|, if any.
 
 EDITOR
 
+• |:command-completion-customlist| can return a list of dictionaries with
+  kind/menu/info/abbr for the popup menu.
+• |gf| and |<cfile>| support `file://…` URIs.
 • |:log| opens log files.
+• |ZR| restarts Nvim (|:restart|).
+• |:uptime| displays uptime.
 
 EVENTS
 
-• todo
+• |:delmarks| now triggers the |MarkSet| autocommand with line==col==0, same
+  as |nvim_buf_del_mark()|
 
 HIGHLIGHTS
 
@@ -146,19 +162,47 @@ LSP
 
 LUA
 
+• |vim.ui.img| can display images. Use `:checkhealth img` to confirm your
+  terminal supports it.
 • |vim.net.request()| can specify custom headers by passing `opts.headers`.
+• |vim.net.request()| can now accept  `method` param overload for multiple HTTP methods.
+• |writefile()| treats Lua strings as "blob", so it can be used to write
+  binary data.
 • |vim.filetype.inspect()| returns a copy of the internal tables used for
   filetype detection.
 • Added `__eq` metamethod to |vim.VersionRange|. 2 distinct but representing
-the same range instances now compare equal.
+  the same range instances now compare equal.
+• Documentation for |vim.fn| now points to preferred Lua alternatives when
+  available.
+• |vim.list.unique()| and |vim.list.bisect()| now support passing a string
+  as a shorthand of a `key`
+• |vim.isnil()| tests if a value is `nil` or |vim.NIL|.
+• |vim.nonnil()| returns the first argument which is not nil.
+• |vim.npcall()| calls the function `fn` in protected-mode like |pcall()|,
+  but returns `nil` on error.
+• |vim.pos| can now convert between positions and buffer offsets.
 
 OPTIONS
 
-• todo
+• 'ttyfast' can be disabled during startup by setting the environment variable
+  `NVIM_NOTTYFAST` to disable automatic background detection.
+• 'scrolloffpad' allows vertically centering cursor at the end of file.
+• 'shortmess' flag |shm-u| silences undo/redo messages.
+• 'winpinned' prevents window from closing unless specifically targeted.
 
 PERFORMANCE
 
-• todo
+• |treesitter-highlight| performance on large injection-heavy files improves
+  by 50% to 100% by reusing edited child-tree ranges.
+
+• Nvim architecture allows pure-Lua implementations of some `vim.fn`
+  functions, which skips the Vimscript <=> Lua "bridge" (no data
+  conversion/marshalling) entirely, if the `vim.fn` function is called from
+  Lua.
+• The table holding LSP data is now cleared using `table.clear`,
+  thus reducing GC and memory reallocation during each data reset.
+• When parsing the received Content-Length messages,
+  the RPC client will no longer allocate extra strings.
 
 PLUGINS
 
@@ -174,7 +218,11 @@ TERMINAL
 
 TREESITTER
 
-• todo
+• |v_]N| |v_[N| expand selection to sibling treesitter node.
+• |treesitter-highlight-conceal| can be removed by adding a `@noconceal`
+  capture.
+• |vim.treesitter.select()| starts or adjusts a visual selection at cursor,
+  based on tree nodes.
 
 TUI
 
@@ -183,11 +231,18 @@ TUI
 
 UI
 
-• todo
+• These builtin "picker" menus delegate to |vim.ui.select()|:
+  • :browse oldfiles
+  • |:recover|
+  • |:tselect|
+  • |z=| (spell suggest)
 
 VIMSCRIPT
 
-• todo
+• |v:exitreason| is set before |QuitPre|.
+• |v:starttime| is the process start time (nanoseconds since UNIX epoch).
+• |v:useractive| indicates user activity.
+• |serverlist()| with `info=true` returns details for each server (own + peers).
 
 ==============================================================================
 CHANGED FEATURES                                                 *news-changed*

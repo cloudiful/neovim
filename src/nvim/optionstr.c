@@ -81,7 +81,7 @@ static char SHM_ALL[] = { SHM_RO, SHM_MOD, SHM_LINES,
                           SHM_WRI, SHM_ABBREVIATIONS, SHM_WRITE, SHM_TRUNC, SHM_TRUNCALL,
                           SHM_OVER, SHM_OVERALL, SHM_SEARCH, SHM_ATTENTION, SHM_INTRO,
                           SHM_COMPLETIONMENU, SHM_COMPLETIONSCAN, SHM_RECORDING, SHM_FILEINFO,
-                          SHM_SEARCHCOUNT, 'n', 'f', 'x', 'i', 0, };
+                          SHM_SEARCHCOUNT, SHM_UNDO, 'n', 'f', 'x', 'i', 0, };
 
 /// After setting various option values: recompute variables that depend on
 /// option values.
@@ -1714,6 +1714,36 @@ const char *did_set_shada(optset_T *args)
   return NULL;
 }
 
+/// Validate 'shellpipe'/'shellredir' option.
+const char *did_set_shellpipe_redir(optset_T *args)
+{
+  bool seen = false;
+
+  for (char *p = args->os_newval.string.data; *p != NUL; p++) {
+    if (*p != '%') {
+      continue;
+    }
+    if (p[1] == NUL) {
+      return e_invalid_format_string_single_percent_s;
+    }
+    if (p[1] == '%') {
+      p++;    // skip second %
+      continue;
+    }
+
+    if (p[1] == 's') {
+      if (seen) {
+        return e_invalid_format_string_single_percent_s;
+      }
+      seen = true;
+      p++;    // consume 's'
+      continue;
+    }
+    return e_invalid_format_string_single_percent_s;
+  }
+  return NULL;
+}
+
 /// The 'shortmess' option is changed.
 const char *did_set_shortmess(optset_T *args)
 {
@@ -1829,6 +1859,14 @@ const char *did_set_spellsuggest(optset_T *args FUNC_ATTR_UNUSED)
     return e_invarg;
   }
   return NULL;
+}
+
+const char *did_set_splitkeep(optset_T *args FUNC_ATTR_UNUSED)
+{
+  FOR_ALL_TAB_WINDOWS(tp, wp) {
+    wp->w_prev_height = wp->w_height;
+  }
+  return did_set_str_generic(args);
 }
 
 /// The 'statuscolumn' option is changed.
@@ -2223,7 +2261,7 @@ struct chars_tab {
 };
 
 #define CHARSTAB_ENTRY(cp, name, def, fallback) \
-  { (cp), { name, STRLEN_LITERAL(name) }, def, fallback }
+  { (cp), STATIC_CSTR_STRING_INIT(name), def, fallback }
 
 static fcs_chars_T fcs_chars;
 static const struct chars_tab fcs_tab[] = {

@@ -353,6 +353,7 @@ set(LUA_INSPECT_MODULE_SOURCE ${NVIM_RUNTIME_DIR}/lua/vim/inspect.lua)
 set(LUA_KEYMAP_MODULE_SOURCE ${NVIM_RUNTIME_DIR}/lua/vim/keymap.lua)
 set(LUA_LOADER_MODULE_SOURCE ${NVIM_RUNTIME_DIR}/lua/vim/loader.lua)
 set(LUA_TEXT_MODULE_SOURCE ${NVIM_RUNTIME_DIR}/lua/vim/text.lua)
+set(LUA_TTY_MODULE_SOURCE ${NVIM_RUNTIME_DIR}/lua/vim/tty.lua)
 
 # Find all Lua modules in the _core/ directory.
 file(GLOB LUA_CORE_MODULE_SOURCES ${NVIM_RUNTIME_DIR}/lua/vim/_core/*.lua)
@@ -361,6 +362,11 @@ foreach(core_source ${LUA_CORE_MODULE_SOURCES})
   get_filename_component(core_filename ${core_source} NAME_WE)
   list(APPEND LUA_CORE_COMMAND_ARGS ${core_source} "vim._core.${core_filename}")
 endforeach()
+
+set(LUA_BLOB_COMPILE_FLAG)
+if(COMPILE_LUA AND NOT WIN32)
+  set(LUA_BLOB_COMPILE_FLAG -c)
+endif()
 
 file(GLOB API_HEADERS CONFIGURE_DEPENDS api/*.h)
 list(REMOVE_ITEM API_HEADERS ${CMAKE_CURRENT_LIST_DIR}/api/ui_events.in.h)
@@ -636,9 +642,7 @@ add_custom_command(
 
 add_custom_command(
   OUTPUT ${VIM_MODULE_FILE}
-  COMMAND ${CMAKE_COMMAND} -E env
-      "LUAC_PRG=${LUAC_PRG}"
-      ${LUA_PRG} ${CHAR_BLOB_GENERATOR} -c ${VIM_MODULE_FILE}
+  COMMAND ${LUA_PRG} ${CHAR_BLOB_GENERATOR} ${LUA_BLOB_COMPILE_FLAG} ${VIM_MODULE_FILE}
       # NB: vim._init_packages and vim.inspect must be be first and second ones
       # respectively, otherwise --luamod-dev won't work properly.
       ${LUA_INIT_PACKAGES_MODULE_SOURCE} "vim._init_packages"
@@ -649,6 +653,7 @@ add_custom_command(
       ${LUA_KEYMAP_MODULE_SOURCE} "vim.keymap"
       ${LUA_LOADER_MODULE_SOURCE} "vim.loader"
       ${LUA_TEXT_MODULE_SOURCE} "vim.text"
+      ${LUA_TTY_MODULE_SOURCE} "vim.tty"
       ${LUA_CORE_COMMAND_ARGS}
   DEPENDS
     ${CHAR_BLOB_GENERATOR}
@@ -660,6 +665,7 @@ add_custom_command(
     ${LUA_KEYMAP_MODULE_SOURCE}
     ${LUA_LOADER_MODULE_SOURCE}
     ${LUA_TEXT_MODULE_SOURCE}
+    ${LUA_TTY_MODULE_SOURCE}
     ${LUA_CORE_MODULE_SOURCES}
   VERBATIM
 )

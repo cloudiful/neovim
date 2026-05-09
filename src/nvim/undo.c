@@ -382,7 +382,7 @@ int u_savecommon(buf_T *buf, linenr_T top, linenr_T bot, linenr_T newbot, bool r
   u_entry_T *prev_uep;
   linenr_T size = bot - top - 1;
 
-  // If buf->b_u_synced == true make a new header.
+  // If buf->b_u_synced is true make a new header.
   if (buf->b_u_synced) {
     // Need to create new entry in b_changelist.
     buf->b_new_change = true;
@@ -1772,7 +1772,7 @@ void u_undo(int count)
   // If we get an undo command while executing a macro, we behave like the
   // original vi. If this happens twice in one macro the result will not
   // be compatible.
-  if (curbuf->b_u_synced == false) {
+  if (!curbuf->b_u_synced) {
     u_sync(true);
     count = 1;
   }
@@ -1880,7 +1880,9 @@ static void u_doit(int startcount, bool quiet, bool do_buf_event)
         curbuf->b_u_curhead = curbuf->b_u_oldhead;
         beep_flush();
         if (count == startcount - 1) {
-          msg(_("Already at oldest change"), 0);
+          if (!shortmess(SHM_UNDO)) {
+            msg(_("Already at oldest change"), 0);
+          }
           return;
         }
         break;
@@ -1891,7 +1893,9 @@ static void u_doit(int startcount, bool quiet, bool do_buf_event)
       if (curbuf->b_u_curhead == NULL || get_undolevel(curbuf) <= 0) {
         beep_flush();  // nothing to redo
         if (count == startcount - 1) {
-          msg(_("Already at newest change"), 0);
+          if (!shortmess(SHM_UNDO)) {
+            msg(_("Already at newest change"), 0);
+          }
           return;
         }
         break;
@@ -1925,7 +1929,7 @@ void undo_time(int step, bool sec, bool file, bool absolute)
   }
 
   // First make sure the current undoable change is synced.
-  if (curbuf->b_u_synced == false) {
+  if (!curbuf->b_u_synced) {
     u_sync(true);
   }
 
@@ -2112,10 +2116,12 @@ void undo_time(int step, bool sec, bool file, bool absolute)
     }
 
     if (closest == closest_start) {
-      if (step < 0) {
-        msg(_("Already at oldest change"), 0);
-      } else {
-        msg(_("Already at newest change"), 0);
+      if (!shortmess(SHM_UNDO)) {
+        if (step < 0) {
+          msg(_("Already at oldest change"), 0);
+        } else {
+          msg(_("Already at newest change"), 0);
+        }
       }
       return;
     }
@@ -2545,7 +2551,8 @@ static void u_undo_end(bool did_undo, bool absolute, bool quiet)
 
   if (quiet
       || global_busy        // no messages until global is finished
-      || !messaging()) {    // 'lazyredraw' set, don't do messages now
+      || !messaging()       // 'lazyredraw' set, don't do messages now
+      || shortmess(SHM_UNDO)) {
     return;
   }
 

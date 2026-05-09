@@ -1,8 +1,9 @@
 --- @meta _
 -- This file is NOT generated, edit it directly. See also _meta/api_keysets.gen.lua.
+
 error('Cannot require a meta file')
 
---- Extra types we can't generate keysets for
+--- Extra types we don't define keysets for.
 
 --- @class vim.api.keyset.extmark_details
 --- @field ns_id integer
@@ -21,7 +22,7 @@ error('Cannot require a meta file')
 --- @field hl_group? string
 --- @field hl_eol? boolean
 ---
---- @field conceal? string
+--- @field conceal? string|false
 --- @field spell? boolean
 --- @field ui_watched? boolean
 --- @field url? string
@@ -75,7 +76,7 @@ error('Cannot require a meta file')
 --- @field match string expanded value of <amatch>
 --- @field buf integer expanded value of <abuf>
 --- @field file string expanded value of <afile>
---- @field data? any arbitrary data passed from |nvim_exec_autocmds()|                       *event-data*
+--- @field data? any arbitrary data passed from |nvim_exec_autocmds()|
 
 --- @class vim.api.keyset.create_user_command.command_args
 --- @field name string Command name
@@ -111,7 +112,7 @@ error('Cannot require a meta file')
 ---
 --- Command modifiers in a structured format. Has the same structure as the
 --- "mods" key of |nvim_parse_cmd()|.
---- @field smods table
+--- @field smods vim.api.keyset.cmd_mods
 
 --- @class vim.api.keyset.command_info
 --- @field name string
@@ -129,6 +130,7 @@ error('Cannot require a meta file')
 --- @field range? string
 --- @field addr? string
 --- @field callback? function
+--- @field desc? string
 
 --- @class vim.api.keyset.hl_info.base
 --- @field reverse? true
@@ -151,13 +153,15 @@ error('Cannot require a meta file')
 --- @field background? integer
 
 --- @class vim.api.keyset.get_hl_info : vim.api.keyset.hl_info.base
---- @field fg? integer
---- @field bg? integer
---- @field sp? integer
---- @field default? true
---- @field link? string
 --- @field blend? integer
+--- @field bg? integer
+--- @field bg_indexed? boolean
 --- @field cterm? vim.api.keyset.hl_info.cterm
+--- @field default? true
+--- @field fg? integer
+--- @field fg_indexed? boolean
+--- @field link? string
+--- @field sp? integer
 
 --- @class vim.api.keyset.set_hl_info : vim.api.keyset.hl_info.base
 --- @field fg? integer|string
