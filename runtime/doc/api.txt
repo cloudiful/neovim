@@ -1871,6 +1871,15 @@ nvim__redraw({opts})                                          *nvim__redraw()*
     See also: ~
       • |:redraw|
 
+                                                *nvim__set_restart_on_crash()*
+nvim__set_restart_on_crash({progpath}, {argv})
+    WARNING: This feature is experimental/unstable.
+
+
+    Parameters: ~
+      • {progpath}  (`string`)
+      • {argv}      (`any[]`)
+
 nvim__stats()                                                  *nvim__stats()*
     WARNING: This feature is experimental/unstable.
 
@@ -3550,6 +3559,8 @@ nvim_get_option_value({name}, {opts})                *nvim_get_option_value()*
                   autocommands for the corresponding filetype.
                 • scope: One of "global" or "local". Analogous to |:setglobal|
                   and |:setlocal|, respectively.
+                • tab: |tab-ID| for tab-local options. Currently only supports
+                  "cmdheight". Tabpage `0` means the current tabpage.
                 • win: |window-ID|. Used for getting window local options.
 
     Return: ~

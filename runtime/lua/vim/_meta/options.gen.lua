@@ -2240,6 +2240,7 @@ vim.go.ei = vim.go.eventignore
 --- 	`TabClosedPre`,
 --- 	`TabEnter`,
 --- 	`TabLeave`,
+--- 	`TabMoved`,
 --- 	`TabNew`,
 --- 	`TabNewEntered`,
 --- 	`TermClose`,
@@ -4158,7 +4159,7 @@ vim.wo.list = vim.o.list
 --- 			set listchars+=tab:>-,lead:.
 --- ```
 ---
---- 						*lcs-leadmultispace*
+---                                 *lcs-leadmultispace* *indent-guides*
 ---   leadmultispace:c...
 --- 		Like the `lcs-multispace` value, but for leading
 --- 		spaces only.  Also overrides `lcs-lead` for leading
@@ -4171,6 +4172,16 @@ vim.wo.list = vim.o.list
 ---
 --- 		Where "XXX" denotes the first non-blank characters in
 --- 		the line.
+---
+---                 Combined with `lcs-leadtab`, this can be used to show
+---                 "indentation guides" (vertical lines).
+--- 		For example, with 'shiftwidth' 2:
+---
+--- ```vim
+--- 			set list listchars=leadtab:\ \ │,tab:\ \ │,leadmultispace:\ \ │
+--- ```
+--- For richer rendering (per-level colors, treesitter-aware
+--- 		scopes, etc.) use a third-party plugin.
 --- 						*lcs-leadtab*
 ---   leadtab:xy[z]
 --- 		Like `lcs-tab`, but only for leading tabs.  When
@@ -5446,9 +5457,9 @@ vim.wo.scr = vim.wo.scroll
 --- Maximum number of lines kept beyond the visible screen. Lines at the
 --- top are deleted if new lines exceed this limit.
 --- Minimum is 1, maximum is 1000000.
---- Only in `terminal` buffers.
+--- Only in `terminal` and `prompt-buffer` buffers.
 ---
---- Note: Lines that are not visible and kept in scrollback are not
+--- Note: Lines that are not visible and kept in terminal scrollback are not
 --- reflown when the terminal buffer is resized horizontally.
 ---
 --- @type integer
@@ -6855,7 +6866,7 @@ vim.wo.stc = vim.wo.statuscolumn
 ---          added without modifying code that reacts on mouse clicks on
 ---          this label.
 ---       Use `getmousepos()`.winid in the specified function to get the
----       corresponding window id of the clicked item.
+---       corresponding `window-ID` of the clicked item.
 --- \< -   Where to truncate line if too long.  Default is at the start.
 ---       No width fields allowed.
 --- = -   Separation point between alignment sections.  Each section will

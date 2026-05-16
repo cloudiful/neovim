@@ -139,15 +139,20 @@ EDITOR
 • |:log| opens log files.
 • |ZR| restarts Nvim (|:restart|).
 • |:uptime| displays uptime.
+• |:packupdate| and |:packdel| for managing |vim.pack|.
+• 'scrollback' is now also valid in |prompt-buffer| buffers to limit the
+  number of history lines kept above the prompt.
 
 EVENTS
 
 • |:delmarks| now triggers the |MarkSet| autocommand with line==col==0, same
   as |nvim_buf_del_mark()|
+• |TextPutPre| and |TextPutPost| are triggered before/after putting text.
+• |TabMoved| is triggered when tabs are reordered.
 
 HIGHLIGHTS
 
-• todo
+• `Dimmed` for text that should be de-emphasized.
 
 LSP
 
@@ -156,8 +161,12 @@ LSP
     "preselect". https://microsoft.github.io/language-server-protocol/specification/#completionClientCapabilities
   • `textDocument/foldingRange` |vim.lsp.foldtext()| highlights collapsed text.
     https://microsoft.github.io/language-server-protocol/specification/#textDocument_foldingRange
-• |vim.lsp.buf.declaration()|, |vim.lsp.buf.definition()|, |vim.lsp.buf.definition()|,
-  and |vim.lsp.buf.implementation()| now follows 'switchbuf'.
+• |vim.lsp.buf.declaration()|, |vim.lsp.buf.definition()|,
+  |vim.lsp.buf.type_definition()|, and |vim.lsp.buf.implementation()|
+  now follows 'switchbuf'.
+• |vim.lsp.buf.declaration()|, |vim.lsp.buf.definition()|,
+  |vim.lsp.buf.type_definition()|, and |vim.lsp.buf.implementation()|
+  now supports passing arbitrary positions.
 • Support for nested snippets.
 
 LUA
@@ -181,11 +190,11 @@ LUA
 • |vim.npcall()| calls the function `fn` in protected-mode like |pcall()|,
   but returns `nil` on error.
 • |vim.pos| can now convert between positions and buffer offsets.
+• |vim.log| for easily creating loggers.
 
 OPTIONS
 
-• 'ttyfast' can be disabled during startup by setting the environment variable
-  `NVIM_NOTTYFAST` to disable automatic background detection.
+• 'ttyfast' can be disabled during startup by setting |$NVIM_NOTTYFAST|.
 • 'scrolloffpad' allows vertically centering cursor at the end of file.
 • 'shortmess' flag |shm-u| silences undo/redo messages.
 • 'winpinned' prevents window from closing unless specifically targeted.
@@ -262,8 +271,9 @@ REMOVED FEATURES                                                 *news-removed*
 
 These deprecated features were removed.
 
-• |vim.lsp.buf.declaration()|, |vim.lsp.buf.definition()|, |vim.lsp.buf.definition()|,
-  and |vim.lsp.buf.implementation()| no longer accept the `reuse_win` option.
+• |vim.lsp.buf.declaration()|, |vim.lsp.buf.definition()|,
+  |vim.lsp.buf.type_definition()|, and |vim.lsp.buf.implementation()|
+  no longer accept the `reuse_win` option.
 
 ==============================================================================
 DEPRECATIONS                                                *news-deprecations*
